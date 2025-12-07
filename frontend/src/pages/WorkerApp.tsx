@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Amplify } from 'aws-amplify';
-import { fetchUserAttributes } from 'aws-amplify/auth';
+import { fetchUserAttributes, fetchAuthSession } from 'aws-amplify/auth';
 import { Authenticator, useAuthenticator } from '@aws-amplify/ui-react';
-import { authConfig } from '../aws-config';
+import { authConfig, apiConfig } from '../aws-config';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 const formFields = {
@@ -29,20 +29,47 @@ const formFields = {
 const AuthenticatedWorkerView = () => {
     const { user, signOut } = useAuthenticator((context) => [context.user]);
     const [userName, setUserName] = useState<string>('');
+    const [earnings, setEarnings] = useState<number>(0);
     const location = useLocation();
     const navigate = useNavigate();
 
     useEffect(() => {
-        const loadUserName = async () => {
+        const loadUserData = async () => {
             try {
+                // 1. Load Attributes
                 const attributes = await fetchUserAttributes();
                 setUserName(attributes.name || attributes.preferred_username || user?.username || '');
+
+                // 2. Load Earnings (Fetch My Tasks and sum rewards)
+                // Note: In a real app, this should be a dedicated /earnings endpoint for performance
+                const session = await fetchAuthSession();
+                const token = session.tokens?.idToken?.toString();
+
+                // Using the correctly imported apiConfig
+                const response = await fetch(`${apiConfig.endpoint}tasks/my-tasks`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': token || '',
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const tasks = data.tasks || [];
+
+                    const total = tasks
+                        .filter((t: any) => ['SUBMITTED', 'COMPLETED', 'PAID'].includes(t.status))
+                        .reduce((sum: number, t: any) => sum + (parseFloat(t.reward) || 0), 0);
+
+                    setEarnings(total);
+                }
+
             } catch (error) {
-                console.error('Error fetching user attributes:', error);
+                console.error('Error loading user data:', error);
                 setUserName(user?.username || '');
             }
         };
-        loadUserName();
+        loadUserData();
     }, [user]);
 
     return (
@@ -50,7 +77,20 @@ const AuthenticatedWorkerView = () => {
             <div className="header" style={{ padding: '1rem 2rem', borderBottom: 'var(--glass-border)' }}>
                 <h2>Panel de Trabajador</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <Link to="/requester" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '0.9rem' }}>Cambiar a Solicitante</Link>
+                    <div style={{
+                        background: 'rgba(16, 185, 129, 0.1)',
+                        color: '#10b981',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '2rem',
+                        fontWeight: 'bold',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                    }}>
+                        <span>💰</span>
+                        <span>${earnings.toFixed(2)}</span>
+                    </div>
+                    <Link to="/requester" className="btn-secondary" style={{ textDecoration: 'none', fontSize: '0.9rem' }}>Cambiar a Requester</Link>
                     <span style={{ color: 'var(--text-muted)' }}>Hola, {userName || user?.username}</span>
                     <button className="btn-secondary" onClick={signOut}>Cerrar sesión</button>
                 </div>

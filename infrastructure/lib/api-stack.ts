@@ -33,6 +33,24 @@ export class ApiStack extends cdk.Stack {
             },
         });
 
+        this.api.addGatewayResponse('GatewayResponseDefault4XX', {
+            type: apigateway.ResponseType.DEFAULT_4XX,
+            responseHeaders: {
+                'Access-Control-Allow-Origin': "'*'",
+                'Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+                'Access-Control-Allow-Methods': "'OPTIONS,GET,POST,PUT,DELETE'",
+            },
+        });
+
+        this.api.addGatewayResponse('GatewayResponseDefault5XX', {
+            type: apigateway.ResponseType.DEFAULT_5XX,
+            responseHeaders: {
+                'Access-Control-Allow-Origin': "'*'",
+                'Access-Control-Allow-Headers': "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+                'Access-Control-Allow-Methods': "'OPTIONS,GET,POST,PUT,DELETE'",
+            },
+        });
+
         // Single Authorizer for the Platform
         const platformAuthorizer = new apigateway.CognitoUserPoolsAuthorizer(this, 'PlatformAuthorizer', {
             cognitoUserPools: [props.userPool],
@@ -70,10 +88,12 @@ export class ApiStack extends cdk.Stack {
             environment: {
                 SUBMISSIONS_TABLE: props.submissionsTable.tableName,
                 SUBMISSION_QUEUE_URL: props.submissionQueue.queueUrl,
+                TASKS_TABLE: props.tasksTable.tableName,
             },
         });
         props.submissionsTable.grantWriteData(submitWorkLambda);
         props.submissionQueue.grantSendMessages(submitWorkLambda);
+        props.tasksTable.grantWriteData(submitWorkLambda);
 
         // --- API Resources ---
 
@@ -156,6 +176,22 @@ export class ApiStack extends cdk.Stack {
         const upload = media.addResource('upload');
         // POST /media/upload (Generate pre-signed URL for upload)
         upload.addMethod('POST', new apigateway.LambdaIntegration(uploadMediaLambda), {
+            authorizer: platformAuthorizer,
+        });
+
+        // Assign Task
+        const assignTaskLambda = new nodejs.NodejsFunction(this, 'AssignTaskFunction', {
+            runtime: lambda.Runtime.NODEJS_18_X,
+            entry: path.join(__dirname, '../../backend/src/tasks/assign-task.ts'),
+            handler: 'handler',
+            environment: {
+                TASKS_TABLE: props.tasksTable.tableName,
+            },
+        });
+        props.tasksTable.grantWriteData(assignTaskLambda);
+
+        const assignTaskRoute = tasks.addResource('assign');
+        assignTaskRoute.addMethod('POST', new apigateway.LambdaIntegration(assignTaskLambda), {
             authorizer: platformAuthorizer,
         });
 

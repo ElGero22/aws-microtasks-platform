@@ -11,39 +11,7 @@
     --glow-shadow: 0 0 30px rgba(99, 102, 241, 0.4);
 }
 
-@keyframes float {
-
-    0%,
-    100% {
-        transform: translateY(0px);
-    }
-
-    50% {
-        transform: translateY(-10px);
-    }
-}
-
-@keyframes shimmer {
-    0% {
-        background-position: -1000px 0;
-    }
-
-    100% {
-        background-position: 1000px 0;
-    }
-}
-
-@keyframes pulse-glow {
-
-    0%,
-    100% {
-        box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
-    }
-
-    50% {
-        box-shadow: 0 0 40px rgba(99, 102, 241, 0.6);
-    }
-}
+/* Animations removed for performance */
 
 body {
     background-color: var(--bg-color);
@@ -70,7 +38,7 @@ body::before {
     background:
         linear-gradient(90deg, transparent 0%, rgba(99, 102, 241, 0.03) 50%, transparent 100%);
     background-size: 200% 100%;
-    animation: shimmer 8s infinite linear;
+    /* animation: shimmer 8s infinite linear; */
     pointer-events: none;
     z-index: 0;
 }
@@ -125,7 +93,7 @@ body::before {
     margin: 0;
     letter-spacing: -0.03em;
     filter: drop-shadow(0 2px 8px rgba(99, 102, 241, 0.5));
-    animation: shimmer 3s infinite linear;
+    /* animation: shimmer 3s infinite linear; */
 }
 
 .btn-primary {
@@ -339,7 +307,7 @@ select.form-input {
     font-weight: 800;
     border: 1px solid rgba(16, 185, 129, 0.3);
     box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
-    animation: pulse-glow 2s infinite;
+    /* animation: pulse-glow 2s infinite; */
 }
 
 .status-message {
@@ -487,6 +455,7 @@ select.form-input {
     background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
     opacity: 0;
     transition: opacity 0.3s;
+    pointer-events: none;
 }
 
 .task-card::after {
@@ -499,6 +468,7 @@ select.form-input {
     background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
     opacity: 0;
     transition: opacity 0.3s;
+    pointer-events: none;
 }
 
 .task-card:hover {
@@ -510,6 +480,7 @@ select.form-input {
 
 .task-card:hover::before {
     opacity: 1;
+    pointer-events: none;
 }
 
 .task-card:hover::after {
@@ -869,5 +840,5 @@ select.form-input {
     border-radius: 2rem;
     padding: 2rem;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-    animation: float 6s ease-in-out infinite;
+    /* animation: float 6s ease-in-out infinite; */
 }

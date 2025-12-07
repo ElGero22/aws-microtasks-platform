@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { apiConfig } from '../aws-config';
 import '../styles/dashboard.css';
+import { TaskMedia } from '../components/TaskMedia';
 
 export function WorkerDashboard() {
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [submissionMessage, setSubmissionMessage] = useState('');
     const [submittingId, setSubmittingId] = useState<string | null>(null);
-    const [imageModalUrl, setImageModalUrl] = useState<string | null>(null);
+
 
     useEffect(() => {
         loadTasks();
@@ -76,6 +77,46 @@ export function WorkerDashboard() {
         }
     };
 
+    const handleAssign = async (taskId: string) => {
+        console.log(`Attempting to assign task ${taskId}...`);
+        try {
+            const session = await fetchAuthSession();
+            const token = session.tokens?.idToken?.toString();
+            const workerId = session.userSub;
+            console.log('Worker ID:', workerId);
+
+            const url = `${apiConfig.endpoint}tasks/assign`;
+            console.log('Fetching:', url);
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token || '',
+                },
+                body: JSON.stringify({
+                    taskId,
+                    workerId
+                }),
+            });
+            console.log('Response status:', response.status);
+
+            if (response.ok) {
+                console.log('Assignment successful');
+                setSubmissionMessage('¡Tarea asignada con éxito! Puedes empezar a trabajar.');
+                loadTasks(); // Refresh list to remove the assigned task from "Available"
+                setSubmittingId(taskId);
+            } else {
+                const errorText = await response.text();
+                console.error('Assignment failed:', errorText);
+                setSubmissionMessage(`Error al asignar la tarea: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Error assigning task:', error);
+            setSubmissionMessage('Error de red al asignar tarea.');
+        }
+    };
+
     if (loading) return (
         <div className="dashboard-container" style={{ textAlign: 'center', paddingTop: '4rem' }}>
             <div style={{ color: 'var(--text-muted)' }}>Cargando tareas disponibles...</div>
@@ -92,7 +133,7 @@ export function WorkerDashboard() {
             {submissionMessage && <div className="status-message">{submissionMessage}</div>}
 
             <div className="grid-layout">
-                {tasks.map((task: any) => (
+                {tasks.filter((task: any) => task.status === 'AVAILABLE').map((task: any) => (
                     <div key={task.taskId} className="task-card">
                         <div className="task-header">
                             <div>
@@ -114,51 +155,7 @@ export function WorkerDashboard() {
                         </p>
 
                         {/* Media Preview */}
-                        {task.mediaUrl && (
-                            <div style={{ marginBottom: '1.5rem', borderRadius: '1rem', overflow: 'hidden', border: 'var(--glass-border)' }}>
-                                {task.mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                                    <div
-                                        onClick={() => setImageModalUrl(task.mediaUrl)}
-                                        style={{ cursor: 'pointer', position: 'relative' }}
-                                    >
-                                        <img
-                                            src={task.mediaUrl}
-                                            alt="Contenido de la tarea"
-                                            style={{ width: '100%', maxHeight: '250px', objectFit: 'cover', transition: 'opacity 0.2s' }}
-                                            onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
-                                            onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
-                                        />
-                                        <div style={{
-                                            position: 'absolute',
-                                            top: '10px',
-                                            right: '10px',
-                                            background: 'rgba(0,0,0,0.7)',
-                                            color: 'white',
-                                            padding: '0.5rem',
-                                            borderRadius: '0.5rem',
-                                            fontSize: '0.75rem'
-                                        }}>
-                                            🔍 Click para ampliar
-                                        </div>
-                                    </div>
-                                ) : task.mediaUrl.match(/\.(mp3|wav|ogg|m4a)$/i) ? (
-                                    <div style={{ padding: '1rem', background: 'rgba(10, 14, 26, 0.5)' }}>
-                                        <audio controls src={task.mediaUrl} style={{ width: '100%' }} />
-                                    </div>
-                                ) : task.mediaUrl.match(/\.(mp4|webm|mov)$/i) ? (
-                                    <div style={{ padding: '1rem', background: 'rgba(10, 14, 26, 0.5)' }}>
-                                        <video controls src={task.mediaUrl} style={{ width: '100%', maxHeight: '300px' }} />
-                                    </div>
-                                ) : (
-                                    <div style={{ padding: '1rem', background: 'rgba(10, 14, 26, 0.5)', textAlign: 'center' }}>
-                                        <a href={task.mediaUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-color)', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                                            📎 Ver Archivo Adjunto
-                                            <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>(Se abre en nueva pestaña)</span>
-                                        </a>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        <TaskMedia mediaUrl={task.mediaUrl} />
 
                         <div style={{
                             display: 'flex',
@@ -212,7 +209,7 @@ export function WorkerDashboard() {
                         ) : (
                             <button
                                 className="btn-primary"
-                                onClick={() => setSubmittingId(task.taskId)}
+                                onClick={() => handleAssign(task.taskId)}
                                 style={{ width: '100%' }}
                             >
                                 Iniciar / Enviar Trabajo
@@ -234,62 +231,7 @@ export function WorkerDashboard() {
                 </div>
             )}
 
-            {/* Image Modal */}
-            {imageModalUrl && (
-                <div
-                    onClick={() => setImageModalUrl(null)}
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: 'rgba(0, 0, 0, 0.9)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 10000,
-                        cursor: 'pointer',
-                        padding: '2rem'
-                    }}
-                >
-                    <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setImageModalUrl(null);
-                            }}
-                            style={{
-                                position: 'absolute',
-                                top: '-40px',
-                                right: '0',
-                                background: 'var(--primary-color)',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '0.5rem',
-                                padding: '0.5rem 1rem',
-                                cursor: 'pointer',
-                                fontSize: '1rem',
-                                fontWeight: 'bold'
-                            }}
-                        >
-                            ✕ Cerrar
-                        </button>
-                        <img
-                            src={imageModalUrl || ''}
-                            alt="Vista ampliada"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                                maxWidth: '100%',
-                                maxHeight: '90vh',
-                                objectFit: 'contain',
-                                borderRadius: '1rem',
-                                boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
-                            }}
-                        />
-                    </div>
-                </div>
-            )}
+
         </div>
     );
 }

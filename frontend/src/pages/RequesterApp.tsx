@@ -51,7 +51,7 @@ const AuthenticatedRequesterView = () => {
             <div className="header" style={{ padding: '1rem 2rem', borderBottom: 'var(--glass-border)' }}>
                 <h2>Panel de Solicitante</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <Link to="/worker" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '0.9rem' }}>Cambiar a Trabajador</Link>
+                    <Link to="/worker" className="btn-secondary" style={{ textDecoration: 'none', fontSize: '0.9rem' }}>Cambiar a Worker</Link>
                     <span style={{ color: 'var(--text-muted)' }}>Hola, {userName || user?.username}</span>
                     <button className="btn-secondary" onClick={signOut}>Cerrar sesión</button>
                 </div>
