@@ -149,6 +149,9 @@ export function WorkerMyTasks() {
                         {task.category || 'General'}
                     </span>
                     <h4 style={{ margin: '0.5rem 0', fontSize: '1.1rem' }}>{task.title}</h4>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                        Posted by <span style={{ color: 'var(--text-color)' }}>{task.requesterName || 'Unknown'}</span>
+                    </div>
                 </div>
                 <span className="task-reward">${task.reward}</span>
             </div>

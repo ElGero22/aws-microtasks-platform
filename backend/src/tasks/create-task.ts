@@ -24,11 +24,16 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         const taskId = uuidv4();
         const timestamp = new Date().toISOString();
         const requesterId = event.requestContext.authorizer?.claims?.sub;
+        const requesterName = event.requestContext.authorizer?.claims?.name ||
+            event.requestContext.authorizer?.claims?.preferred_username ||
+            event.requestContext.authorizer?.claims?.email ||
+            'Unknown Requester';
 
         const task = {
             taskId,
             ...body,
             requesterId,
+            requesterName,
             createdAt: timestamp,
             status: 'AVAILABLE',
         };

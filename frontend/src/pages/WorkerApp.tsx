@@ -15,13 +15,16 @@ const formFields = {
             isRequired: true,
         },
         email: {
-            order: 2
+            order: 2,
+            placeholder: 'Enter your email'
         },
         password: {
-            order: 3
+            order: 3,
+            placeholder: 'Enter password'
         },
         confirm_password: {
-            order: 4
+            order: 4,
+            placeholder: 'Confirm password'
         }
     },
 };
@@ -142,7 +145,11 @@ const WorkerAppContent = () => {
                     </h1>
                     <p style={{ color: 'var(--text-muted)' }}>Sign in to browse and complete tasks</p>
                 </div>
-                <Authenticator formFields={formFields} />
+                <Authenticator
+                    formFields={formFields}
+                    signUpAttributes={['name']}
+                    loginMechanisms={['email']}
+                />
             </div>
         </div>
     );
