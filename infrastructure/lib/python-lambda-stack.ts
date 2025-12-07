@@ -3,10 +3,14 @@ import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as path from 'path';
+
 
 interface PythonLambdaStackProps extends cdk.StackProps {
     tasksTable: dynamodb.Table;
@@ -17,6 +21,7 @@ interface PythonLambdaStackProps extends cdk.StackProps {
     assignmentsTable: dynamodb.Table;
     submissionQueue: sqs.Queue;
     disputeStateMachine: sfn.StateMachine;
+    mediaBucket?: s3.Bucket;  // Optional: for AI services
 }
 
 export class PythonLambdaStack extends cdk.Stack {
@@ -26,6 +31,7 @@ export class PythonLambdaStack extends cdk.Stack {
     public readonly listTasksLambda: lambda.Function;
     public readonly listAvailableTasksLambda: lambda.Function;
     public readonly assignTaskLambda: lambda.Function;
+    public readonly processTranscriptionLambda: lambda.Function;
 
     // Submission handlers
     public readonly submitWorkLambda: lambda.Function;
@@ -47,7 +53,7 @@ export class PythonLambdaStack extends cdk.Stack {
         super(scope, id, props);
 
         // Common environment variables for all lambdas
-        const commonEnv = {
+        const commonEnv: { [key: string]: string } = {
             TASKS_TABLE: props.tasksTable.tableName,
             SUBMISSIONS_TABLE: props.submissionsTable.tableName,
             WALLETS_TABLE: props.walletTable.tableName,
@@ -57,6 +63,11 @@ export class PythonLambdaStack extends cdk.Stack {
             SUBMISSION_QUEUE_URL: props.submissionQueue.queueUrl,
             DISPUTE_STATE_MACHINE_ARN: props.disputeStateMachine.stateMachineArn,
         };
+
+        // Add MEDIA_BUCKET if provided (for AI services)
+        if (props.mediaBucket) {
+            commonEnv.MEDIA_BUCKET = props.mediaBucket.bucketName;
+        }
 
         // Lambda layer for shared code
         const sharedLayer = new lambda.LayerVersion(this, 'SharedLayer', {
@@ -91,6 +102,15 @@ export class PythonLambdaStack extends cdk.Stack {
         );
         props.tasksTable.grantWriteData(this.createTaskBatchLambda);
 
+        // Transcribe permissions for audio task creation
+        this.createTaskBatchLambda.addToRolePolicy(new iam.PolicyStatement({
+            actions: ['transcribe:StartTranscriptionJob'],
+            resources: ['*'],
+        }));
+        if (props.mediaBucket) {
+            props.mediaBucket.grantRead(this.createTaskBatchLambda);
+        }
+
         this.publishTaskBatchLambda = createPythonLambda(
             'PublishTaskBatchFn',
             'tasks',
@@ -121,6 +141,42 @@ export class PythonLambdaStack extends cdk.Stack {
         props.tasksTable.grantReadWriteData(this.assignTaskLambda);
         props.assignmentsTable.grantWriteData(this.assignTaskLambda);
 
+        // Process Transcription Handler (triggered by EventBridge)
+        this.processTranscriptionLambda = createPythonLambda(
+            'ProcessTranscriptionFn',
+            'tasks',
+            'process_transcription'
+        );
+        props.tasksTable.grantReadWriteData(this.processTranscriptionLambda);
+
+        // Transcribe permissions to read job results
+        this.processTranscriptionLambda.addToRolePolicy(new iam.PolicyStatement({
+            actions: ['transcribe:GetTranscriptionJob'],
+            resources: ['*'],
+        }));
+        if (props.mediaBucket) {
+            props.mediaBucket.grantRead(this.processTranscriptionLambda);
+        }
+
+        // EventBridge Rule: Trigger when Transcribe jobs complete/fail
+        // Defined here to avoid circular dependency with WorkflowStack
+        const transcribeEventRule = new events.Rule(this, 'TranscribeJobCompleteRule', {
+            ruleName: 'transcribe-job-state-change',
+            description: 'Trigger processTranscriptionLambda when Transcribe jobs complete or fail',
+            eventPattern: {
+                source: ['aws.transcribe'],
+                detailType: ['Transcribe Job State Change'],
+                detail: {
+                    TranscriptionJobStatus: ['COMPLETED', 'FAILED']
+                }
+            }
+        });
+        transcribeEventRule.addTarget(
+            new targets.LambdaFunction(this.processTranscriptionLambda, {
+                retryAttempts: 2
+            })
+        );
+
         // ============ Submission Handlers ============
 
         this.submitWorkLambda = createPythonLambda(
@@ -140,14 +196,37 @@ export class PythonLambdaStack extends cdk.Stack {
             'qc',
             'validate_submission'
         );
-        props.tasksTable.grantReadData(this.validateSubmissionLambda);
+        props.tasksTable.grantReadWriteData(this.validateSubmissionLambda);  // ReadWrite for updating transcription
         props.submissionsTable.grantReadWriteData(this.validateSubmissionLambda);
 
-        // Allow EventBridge put events
+        // EventBridge put events
         this.validateSubmissionLambda.addToRolePolicy(new iam.PolicyStatement({
             actions: ['events:PutEvents'],
             resources: ['*'],
         }));
+
+        // Amazon Rekognition permissions for image classification
+        this.validateSubmissionLambda.addToRolePolicy(new iam.PolicyStatement({
+            actions: ['rekognition:DetectLabels', 'rekognition:DetectText'],
+            resources: ['*'],
+        }));
+
+        // Amazon Transcribe permissions for reading transcription results
+        this.validateSubmissionLambda.addToRolePolicy(new iam.PolicyStatement({
+            actions: ['transcribe:GetTranscriptionJob'],
+            resources: ['*'],
+        }));
+
+        // Amazon SageMaker permissions (optional - for custom models)
+        this.validateSubmissionLambda.addToRolePolicy(new iam.PolicyStatement({
+            actions: ['sagemaker:InvokeEndpoint'],
+            resources: ['*'],
+        }));
+
+        // S3 read access for media files
+        if (props.mediaBucket) {
+            props.mediaBucket.grantRead(this.validateSubmissionLambda);
+        }
 
         // SQS trigger for QC
         this.validateSubmissionLambda.addEventSource(
@@ -209,3 +288,4 @@ export class PythonLambdaStack extends cdk.Stack {
         props.walletTable.grantReadData(this.getWalletLambda);
     }
 }
+

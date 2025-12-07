@@ -2,7 +2,9 @@
 Common utility functions for Lambda handlers.
 """
 import json
+import re
 from decimal import Decimal
+from difflib import SequenceMatcher
 from typing import Any, Dict
 
 
@@ -84,3 +86,51 @@ def get_query_param(event: dict, param_name: str, default: str = None) -> str:
         return params.get(param_name, default)
     except (KeyError, TypeError):
         return default
+
+
+def normalize_text(text: str) -> str:
+    """
+    Normalize text for comparison.
+    Removes punctuation, extra whitespace, and converts to lowercase.
+    
+    Args:
+        text: Raw text input
+        
+    Returns:
+        Normalized text string
+    """
+    if not text:
+        return ''
+    text = str(text).lower().strip()
+    text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
+    text = re.sub(r'\s+', ' ', text)     # Normalize whitespace
+    return text
+
+
+def text_similarity(text1: str, text2: str) -> float:
+    """
+    Calculate similarity ratio between two texts (0.0 - 1.0).
+    Uses difflib.SequenceMatcher (native Python, no external dependencies).
+    
+    For better performance with large texts, consider installing python-Levenshtein.
+    
+    Args:
+        text1: First text to compare
+        text2: Second text to compare
+        
+    Returns:
+        Similarity ratio between 0.0 (completely different) and 1.0 (identical)
+    """
+    if not text1 and not text2:
+        return 1.0
+    if not text1 or not text2:
+        return 0.0
+    
+    # Try python-Levenshtein first (faster), fallback to difflib
+    try:
+        import Levenshtein
+        return Levenshtein.ratio(text1.lower(), text2.lower())
+    except ImportError:
+        # Fallback to native difflib (slower but no dependencies)
+        return SequenceMatcher(None, text1.lower(), text2.lower()).ratio()
+

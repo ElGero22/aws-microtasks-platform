@@ -1,7 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
-import * as events from 'aws-cdk-lib/aws-events';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -10,7 +9,7 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as path from 'path';
 
 interface WorkflowStackProps extends cdk.StackProps {
-    submissionsTable?: dynamodb.Table; // Optional because we might not have passed it in infrastructure.ts yet
+    submissionsTable?: dynamodb.Table;
 }
 
 export class WorkflowStack extends cdk.Stack {
@@ -41,8 +40,7 @@ export class WorkflowStack extends cdk.Stack {
             timeout: cdk.Duration.minutes(5),
         });
 
-        // QC Lambda (only if table is provided, otherwise we skip for now to avoid circular deps if not careful, 
-        // but we can update infrastructure.ts to pass it)
+        // QC Lambda (only if table is provided)
         if (props?.submissionsTable) {
             const qcLambda = new nodejs.NodejsFunction(this, 'ProcessSubmissionFunction', {
                 runtime: lambda.Runtime.NODEJS_18_X,
@@ -59,3 +57,5 @@ export class WorkflowStack extends cdk.Stack {
         }
     }
 }
+
+

@@ -19,7 +19,6 @@ const storageStack = new StorageStack(app, 'StorageStack', {});
 
 const frontendStack = new FrontendStack(app, 'FrontendStack', {});
 
-// Pass submissionsTable to WorkflowStack for QC Lambda
 const workflowStack = new WorkflowStack(app, 'WorkflowStack', {
   submissionsTable: databaseStack.submissionsTable,
 });
@@ -32,7 +31,8 @@ const apiStack = new ApiStack(app, 'ApiStack', {
   mediaBucket: storageStack.mediaBucket,
 });
 
-// Python Lambda Stack for advanced handlers
+// Python Lambda Stack for advanced handlers (including AI services)
+// EventBridge rule for Transcribe is defined inside this stack
 const pythonLambdaStack = new PythonLambdaStack(app, 'PythonLambdaStack', {
   tasksTable: databaseStack.tasksTable,
   submissionsTable: databaseStack.submissionsTable,
@@ -42,4 +42,7 @@ const pythonLambdaStack = new PythonLambdaStack(app, 'PythonLambdaStack', {
   assignmentsTable: databaseStack.assignmentsTable,
   submissionQueue: workflowStack.submissionQueue,
   disputeStateMachine: workflowStack.disputeStateMachine,
+  mediaBucket: storageStack.mediaBucket,
 });
+
+

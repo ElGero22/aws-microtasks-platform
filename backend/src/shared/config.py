@@ -28,6 +28,13 @@ class Config:
     
     # S3 Buckets
     MEDIA_BUCKET = os.environ.get('MEDIA_BUCKET', '')
+    
+    # AI Services Configuration
+    SAGEMAKER_ENDPOINT_NAME = os.environ.get('SAGEMAKER_ENDPOINT_NAME', '')
+    REKOGNITION_MIN_CONFIDENCE = float(os.environ.get('REKOGNITION_MIN_CONFIDENCE', '90'))
+    TRANSCRIBE_LANGUAGE = os.environ.get('TRANSCRIBE_LANGUAGE', 'es-ES')
+    TEXT_SIMILARITY_THRESHOLD = float(os.environ.get('TEXT_SIMILARITY_THRESHOLD', '0.85'))
 
 
 config = Config()
+
