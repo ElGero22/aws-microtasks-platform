@@ -90,6 +90,19 @@ const RequesterAppContent = () => {
     return (
         <div className="auth-wrapper">
             <div className="auth-container">
+                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                    <h1 style={{
+                        fontSize: '2.5rem',
+                        marginBottom: '0.5rem',
+                        background: 'linear-gradient(to right, var(--primary-color), var(--secondary-color))',
+                        backgroundClip: 'text',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent'
+                    }}>
+                        Requester Portal
+                    </h1>
+                    <p style={{ color: 'var(--text-muted)' }}>Sign in to post tasks and manage projects</p>
+                </div>
                 <Authenticator formFields={formFields} loginMechanisms={['email']} />
             </div>
         </div>

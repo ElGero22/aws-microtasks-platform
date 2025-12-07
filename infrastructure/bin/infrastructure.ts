@@ -7,6 +7,7 @@ import { FrontendStack } from '../lib/frontend-stack';
 import { WorkflowStack } from '../lib/workflow-stack';
 import { ApiStack } from '../lib/api-stack';
 import { StorageStack } from '../lib/storage-stack';
+import { PythonLambdaStack } from '../lib/python-lambda-stack';
 
 const app = new cdk.App();
 
@@ -29,4 +30,16 @@ const apiStack = new ApiStack(app, 'ApiStack', {
   submissionsTable: databaseStack.submissionsTable,
   submissionQueue: workflowStack.submissionQueue,
   mediaBucket: storageStack.mediaBucket,
+});
+
+// Python Lambda Stack for advanced handlers
+const pythonLambdaStack = new PythonLambdaStack(app, 'PythonLambdaStack', {
+  tasksTable: databaseStack.tasksTable,
+  submissionsTable: databaseStack.submissionsTable,
+  walletTable: databaseStack.walletTable,
+  disputesTable: databaseStack.disputesTable,
+  transactionsTable: databaseStack.transactionsTable,
+  assignmentsTable: databaseStack.assignmentsTable,
+  submissionQueue: workflowStack.submissionQueue,
+  disputeStateMachine: workflowStack.disputeStateMachine,
 });
