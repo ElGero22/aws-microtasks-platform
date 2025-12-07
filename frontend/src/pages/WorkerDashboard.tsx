@@ -1,0 +1,295 @@
+import { useEffect, useState } from 'react';
+import { fetchAuthSession } from 'aws-amplify/auth';
+import { apiConfig } from '../aws-config';
+import '../styles/dashboard.css';
+
+export function WorkerDashboard() {
+    const [tasks, setTasks] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [submissionMessage, setSubmissionMessage] = useState('');
+    const [submittingId, setSubmittingId] = useState<string | null>(null);
+    const [imageModalUrl, setImageModalUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        loadTasks();
+    }, []);
+
+    const loadTasks = async () => {
+        setLoading(true);
+        try {
+            const session = await fetchAuthSession();
+            const token = session.tokens?.idToken?.toString();
+
+            const response = await fetch(`${apiConfig.endpoint}tasks`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': token || '',
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setTasks(data.tasks || []);
+            } else {
+                console.error('Failed to fetch tasks:', response.status, response.statusText);
+                setSubmissionMessage(`Error fetching tasks: ${response.status} ${response.statusText}`);
+            }
+        } catch (error) {
+            console.error(error);
+            setSubmissionMessage('Network error fetching tasks');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSubmitWork = async (taskId: string, content: string) => {
+        setSubmittingId(taskId);
+        try {
+            const session = await fetchAuthSession();
+            const token = session.tokens?.idToken?.toString();
+            const workerId = session.userSub;
+
+            const response = await fetch(`${apiConfig.endpoint}submissions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token || '',
+                },
+                body: JSON.stringify({
+                    taskId,
+                    workerId,
+                    content: content || 'No text content provided',
+                }),
+            });
+
+            if (response.ok) {
+                setSubmissionMessage(`Work submitted for task!`);
+                setTimeout(() => setSubmissionMessage(''), 3000);
+            } else {
+                setSubmissionMessage('Failed to submit work.');
+            }
+        } catch (error) {
+            console.error(error);
+            setSubmissionMessage('Error submitting work.');
+        } finally {
+            setSubmittingId(null);
+        }
+    };
+
+    if (loading) return (
+        <div className="dashboard-container" style={{ textAlign: 'center', paddingTop: '4rem' }}>
+            <div style={{ color: 'var(--text-muted)' }}>Cargando tareas disponibles...</div>
+        </div>
+    );
+
+    return (
+        <div className="dashboard-container">
+            <div className="header">
+                <h3>Tareas Disponibles</h3>
+                <button className="btn-secondary" onClick={loadTasks}>Actualizar Lista</button>
+            </div>
+
+            {submissionMessage && <div className="status-message">{submissionMessage}</div>}
+
+            <div className="grid-layout">
+                {tasks.map((task: any) => (
+                    <div key={task.taskId} className="task-card">
+                        <div className="task-header">
+                            <div>
+                                <span style={{
+                                    fontSize: '0.75rem',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.05em',
+                                    color: 'var(--secondary-color)',
+                                    fontWeight: 600
+                                }}>
+                                    {task.category || 'General'}
+                                </span>
+                                <h4 style={{ margin: '0.5rem 0', fontSize: '1.1rem' }}>{task.title}</h4>
+                            </div>
+                            <span className="task-reward">${task.reward}</span>
+                        </div>
+                        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+                            {task.description}
+                        </p>
+
+                        {/* Media Preview */}
+                        {task.mediaUrl && (
+                            <div style={{ marginBottom: '1.5rem', borderRadius: '1rem', overflow: 'hidden', border: 'var(--glass-border)' }}>
+                                {task.mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                                    <div
+                                        onClick={() => setImageModalUrl(task.mediaUrl)}
+                                        style={{ cursor: 'pointer', position: 'relative' }}
+                                    >
+                                        <img
+                                            src={task.mediaUrl}
+                                            alt="Contenido de la tarea"
+                                            style={{ width: '100%', maxHeight: '250px', objectFit: 'cover', transition: 'opacity 0.2s' }}
+                                            onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
+                                            onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                                        />
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '10px',
+                                            right: '10px',
+                                            background: 'rgba(0,0,0,0.7)',
+                                            color: 'white',
+                                            padding: '0.5rem',
+                                            borderRadius: '0.5rem',
+                                            fontSize: '0.75rem'
+                                        }}>
+                                            🔍 Click para ampliar
+                                        </div>
+                                    </div>
+                                ) : task.mediaUrl.match(/\.(mp3|wav|ogg|m4a)$/i) ? (
+                                    <div style={{ padding: '1rem', background: 'rgba(10, 14, 26, 0.5)' }}>
+                                        <audio controls src={task.mediaUrl} style={{ width: '100%' }} />
+                                    </div>
+                                ) : task.mediaUrl.match(/\.(mp4|webm|mov)$/i) ? (
+                                    <div style={{ padding: '1rem', background: 'rgba(10, 14, 26, 0.5)' }}>
+                                        <video controls src={task.mediaUrl} style={{ width: '100%', maxHeight: '300px' }} />
+                                    </div>
+                                ) : (
+                                    <div style={{ padding: '1rem', background: 'rgba(10, 14, 26, 0.5)', textAlign: 'center' }}>
+                                        <a href={task.mediaUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-color)', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                            📎 Ver Archivo Adjunto
+                                            <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>(Se abre en nueva pestaña)</span>
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div style={{
+                            display: 'flex',
+                            gap: '1rem',
+                            fontSize: '0.875rem',
+                            color: 'var(--text-muted)',
+                            borderTop: 'var(--glass-border)',
+                            paddingTop: '1rem',
+                            marginBottom: '1rem'
+                        }}>
+                            <span>⏱ {task.timeLimit || 30} mins</span>
+                            <span>⚡ {task.complexity || 'Low'} Complexity</span>
+                        </div>
+
+                        {submittingId === task.taskId ? (
+                            <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.5rem' }}>
+                                <h5 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Enviar tu Trabajo</h5>
+                                <textarea
+                                    className="form-textarea"
+                                    placeholder="Escribe tu respuesta aquí (ej. texto de transcripción)..."
+                                    rows={4}
+                                    style={{ width: '100%', marginBottom: '0.5rem' }}
+                                    id={`submission-text-${task.taskId}`}
+                                />
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                        Subir Archivo (Opcional)
+                                    </label>
+                                    <input type="file" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }} />
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button
+                                        className="btn-primary"
+                                        onClick={() => {
+                                            const textInput = document.getElementById(`submission-text-${task.taskId}`) as HTMLTextAreaElement;
+                                            handleSubmitWork(task.taskId, textInput.value);
+                                        }}
+                                        style={{ flex: 1 }}
+                                    >
+                                        Enviar
+                                    </button>
+                                    <button
+                                        className="btn-secondary"
+                                        onClick={() => setSubmittingId(null)}
+                                        style={{ padding: '0.5rem 1rem' }}
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button
+                                className="btn-primary"
+                                onClick={() => setSubmittingId(task.taskId)}
+                                style={{ width: '100%' }}
+                            >
+                                Iniciar / Enviar Trabajo
+                            </button>
+                        )}
+                    </div>
+                ))}
+            </div>
+
+            {tasks.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)', border: 'var(--glass-border)', borderRadius: '1rem' }}>
+                    <p style={{ marginBottom: '1.5rem' }}>No hay tareas disponibles en este momento.</p>
+                    <p>
+                        ¿Buscas publicar una tarea? <br />
+                        <a href="/requester" style={{ color: 'var(--primary-color)', fontWeight: 'bold', textDecoration: 'none' }}>
+                            Cambiar al Panel de Solicitante
+                        </a>
+                    </p>
+                </div>
+            )}
+
+            {/* Image Modal */}
+            {imageModalUrl && (
+                <div
+                    onClick={() => setImageModalUrl(null)}
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'rgba(0, 0, 0, 0.9)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10000,
+                        cursor: 'pointer',
+                        padding: '2rem'
+                    }}
+                >
+                    <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setImageModalUrl(null);
+                            }}
+                            style={{
+                                position: 'absolute',
+                                top: '-40px',
+                                right: '0',
+                                background: 'var(--primary-color)',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.5rem',
+                                padding: '0.5rem 1rem',
+                                cursor: 'pointer',
+                                fontSize: '1rem',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            ✕ Cerrar
+                        </button>
+                        <img
+                            src={imageModalUrl || ''}
+                            alt="Vista ampliada"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                maxWidth: '100%',
+                                maxHeight: '90vh',
+                                objectFit: 'contain',
+                                borderRadius: '1rem',
+                                boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
