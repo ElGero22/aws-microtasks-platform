@@ -3,6 +3,8 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { apiConfig } from '../aws-config';
 import '../styles/dashboard.css';
 import { TaskMedia } from '../components/TaskMedia';
+import { BoundingBoxEditor } from '../components/BoundingBoxEditor';
+import type { BoundingBox } from '../components/BoundingBoxEditor';
 
 export function WorkerMyTasks() {
     const [tasks, setTasks] = useState<any[]>([]);
@@ -10,6 +12,7 @@ export function WorkerMyTasks() {
     const [message, setMessage] = useState('');
     const [submittingId, setSubmittingId] = useState<string | null>(null);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [boundingBoxes, setBoundingBoxes] = useState<BoundingBox[]>([]);
 
     useEffect(() => {
         loadMyTasks();
@@ -185,9 +188,40 @@ export function WorkerMyTasks() {
                 submittingId === task.taskId ? (
                     <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.5rem' }}>
                         <h5 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Entregar Trabajo</h5>
+
+                        {/* Bounding Box Editor for image tasks */}
+                        {task.mediaUrl && task.mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)/i) && (
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-color)', fontWeight: 600 }}>
+                                    📦 Marca las áreas relevantes en la imagen:
+                                </label>
+                                <BoundingBoxEditor
+                                    imageUrl={task.mediaUrl}
+                                    boxes={boundingBoxes}
+                                    onChange={setBoundingBoxes}
+                                />
+                            </div>
+                        )}
+
+                        {/* Transcription hint for audio tasks */}
+                        {task.mediaUrl && task.mediaUrl.match(/\.(mp3|wav|ogg|m4a)/i) && (
+                            <div style={{
+                                marginBottom: '0.75rem',
+                                padding: '0.75rem',
+                                background: 'rgba(99, 102, 241, 0.1)',
+                                borderRadius: '0.5rem',
+                                fontSize: '0.875rem',
+                                color: 'var(--primary-color)'
+                            }}>
+                                🎧 Escucha el audio arriba y escribe la transcripción en el cuadro de texto.
+                            </div>
+                        )}
+
                         <textarea
                             className="form-textarea"
-                            placeholder="Escribe tu respuesta aquí..."
+                            placeholder={task.mediaUrl?.match(/\.(mp3|wav|ogg|m4a)/i)
+                                ? "Escribe la transcripción del audio aquí..."
+                                : "Escribe tu respuesta aquí..."}
                             rows={4}
                             style={{ width: '100%', marginBottom: '0.5rem' }}
                             id={`submission-text-${task.taskId}`}
@@ -207,7 +241,12 @@ export function WorkerMyTasks() {
                                 className="btn-primary"
                                 onClick={() => {
                                     const textInput = document.getElementById(`submission-text-${task.taskId}`) as HTMLTextAreaElement;
-                                    handleSubmitWork(task.taskId, textInput.value);
+                                    // Include bounding boxes in submission if present
+                                    const content = boundingBoxes.length > 0
+                                        ? JSON.stringify({ text: textInput.value, boundingBoxes })
+                                        : textInput.value;
+                                    handleSubmitWork(task.taskId, content);
+                                    setBoundingBoxes([]); // Reset after submission
                                 }}
                                 style={{ flex: 1 }}
                             >
@@ -218,6 +257,7 @@ export function WorkerMyTasks() {
                                 onClick={() => {
                                     setSubmittingId(null);
                                     setSelectedFile(null);
+                                    setBoundingBoxes([]);
                                 }}
                                 style={{ padding: '0.5rem 1rem' }}
                             >

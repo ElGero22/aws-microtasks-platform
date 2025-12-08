@@ -12,6 +12,7 @@ from shared.logging import logger, log_event
 from shared.models import TaskStatus, WorkerLevel
 from shared.gamification import can_access_task
 from shared.auth import get_user_sub
+from shared.s3_utils import generate_presigned_url, is_media_key
 
 dynamodb = boto3.resource('dynamodb', region_name=config.AWS_REGION)
 
@@ -59,10 +60,16 @@ def handler(event, context):
             required_level = task.get('requiredLevel', WorkerLevel.NOVICE)
             has_access = can_access_task(worker_level, required_level)
             
+            # Generate presigned URL for media if user has access
+            media_url = task.get('mediaUrl')
+            if media_url and has_access and is_media_key(media_url):
+                media_url = generate_presigned_url(media_url)
+            
             processed_task = {
                 **task,
                 'locked': not has_access,
-                'requiredLevel': required_level
+                'requiredLevel': required_level,
+                'mediaUrl': media_url
             }
             
             # If locked, hide sensitive details (optional)
