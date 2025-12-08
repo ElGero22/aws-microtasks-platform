@@ -62,7 +62,8 @@ def handler(event, context):
             'type': task_type,
             'payload': payload,
             'createdAt': timestamp,
-            'isGold': is_gold
+            'isGold': is_gold,
+            'requiredLevel': task_input.get('requiredLevel', 'Novice')  # Gamification: skill level required
         }
 
         # Only add goldAnswer if it exists (not None)

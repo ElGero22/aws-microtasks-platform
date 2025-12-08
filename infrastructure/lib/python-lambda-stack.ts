@@ -19,6 +19,7 @@ interface PythonLambdaStackProps extends cdk.StackProps {
     disputesTable: dynamodb.Table;
     transactionsTable: dynamodb.Table;
     assignmentsTable: dynamodb.Table;
+    workersTable: dynamodb.Table;
     submissionQueue: sqs.Queue;
     disputeStateMachine: sfn.StateMachine;
     mediaBucket?: s3.Bucket;  // Optional: for AI services
@@ -49,6 +50,9 @@ export class PythonLambdaStack extends cdk.Stack {
     // Wallet handlers
     public readonly getWalletLambda: lambda.Function;
 
+    // Worker/Gamification handlers
+    public readonly updateWorkerStatsLambda: lambda.Function;
+
     constructor(scope: Construct, id: string, props: PythonLambdaStackProps) {
         super(scope, id, props);
 
@@ -60,6 +64,7 @@ export class PythonLambdaStack extends cdk.Stack {
             DISPUTES_TABLE: props.disputesTable.tableName,
             TRANSACTIONS_TABLE: props.transactionsTable.tableName,
             ASSIGNMENTS_TABLE: props.assignmentsTable.tableName,
+            WORKERS_TABLE: props.workersTable.tableName,
             SUBMISSION_QUEUE_URL: props.submissionQueue.queueUrl,
             DISPUTE_STATE_MACHINE_ARN: props.disputeStateMachine.stateMachineArn,
         };
@@ -132,6 +137,7 @@ export class PythonLambdaStack extends cdk.Stack {
             'list_available_tasks'
         );
         props.tasksTable.grantReadData(this.listAvailableTasksLambda);
+        props.workersTable.grantReadData(this.listAvailableTasksLambda);  // For level filtering
 
         this.assignTaskLambda = createPythonLambda(
             'AssignTaskFn',
@@ -286,6 +292,30 @@ export class PythonLambdaStack extends cdk.Stack {
             'get_wallet'
         );
         props.walletTable.grantReadData(this.getWalletLambda);
+
+        // ============ Worker/Gamification Handlers ============
+
+        this.updateWorkerStatsLambda = createPythonLambda(
+            'UpdateWorkerStatsFn',
+            'workers',
+            'update_worker_stats'
+        );
+        props.workersTable.grantReadWriteData(this.updateWorkerStatsLambda);
+
+        // DynamoDB Stream trigger: process Approved/Rejected submissions
+        this.updateWorkerStatsLambda.addEventSource(
+            new lambdaEventSources.DynamoEventSource(props.submissionsTable, {
+                startingPosition: lambda.StartingPosition.TRIM_HORIZON,
+                batchSize: 10,
+                retryAttempts: 3,
+                // Filter to only process MODIFY events (status changes)
+                filters: [
+                    lambda.FilterCriteria.filter({
+                        eventName: lambda.FilterRule.isEqual('MODIFY'),
+                    }),
+                ],
+            })
+        );
     }
 }
 

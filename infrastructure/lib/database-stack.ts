@@ -9,6 +9,7 @@ export class DatabaseStack extends cdk.Stack {
     public readonly disputesTable: dynamodb.Table;
     public readonly transactionsTable: dynamodb.Table;
     public readonly assignmentsTable: dynamodb.Table;
+    public readonly workersTable: dynamodb.Table;
 
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
@@ -115,6 +116,20 @@ export class DatabaseStack extends cdk.Stack {
         this.assignmentsTable.addGlobalSecondaryIndex({
             indexName: 'byTask',
             partitionKey: { name: 'taskId', type: dynamodb.AttributeType.STRING },
+        });
+
+        // Workers Table (worker profiles with gamification metrics)
+        this.workersTable = new dynamodb.Table(this, 'WorkersTable', {
+            partitionKey: { name: 'workerId', type: dynamodb.AttributeType.STRING },
+            billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+            removalPolicy: cdk.RemovalPolicy.DESTROY,
+        });
+
+        // GSI for querying workers by level (for leaderboards, etc.)
+        this.workersTable.addGlobalSecondaryIndex({
+            indexName: 'byLevel',
+            partitionKey: { name: 'level', type: dynamodb.AttributeType.STRING },
+            sortKey: { name: 'accuracy', type: dynamodb.AttributeType.NUMBER },
         });
     }
 }

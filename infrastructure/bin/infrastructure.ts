@@ -40,6 +40,7 @@ const pythonLambdaStack = new PythonLambdaStack(app, 'PythonLambdaStack', {
   disputesTable: databaseStack.disputesTable,
   transactionsTable: databaseStack.transactionsTable,
   assignmentsTable: databaseStack.assignmentsTable,
+  workersTable: databaseStack.workersTable,
   submissionQueue: workflowStack.submissionQueue,
   disputeStateMachine: workflowStack.disputeStateMachine,
   mediaBucket: storageStack.mediaBucket,

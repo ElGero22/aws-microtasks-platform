@@ -18,6 +18,7 @@ class Config:
     TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE', '')
     DISPUTES_TABLE = os.environ.get('DISPUTES_TABLE', '')
     ASSIGNMENTS_TABLE = os.environ.get('ASSIGNMENTS_TABLE', '')
+    WORKERS_TABLE = os.environ.get('WORKERS_TABLE', '')
     
     # SQS Queues
     SUBMISSION_QUEUE_URL = os.environ.get('SUBMISSION_QUEUE_URL', '')
