@@ -36,21 +36,45 @@ A full-stack crowdsourcing platform built with AWS CDK, React, and TypeScript.
 aws-microtasks-platform/
 ├── backend/
 │   └── src/
-│       ├── tasks/          # Task management Lambdas
-│       ├── media/          # Media upload Lambdas
-│       └── qc/             # Quality control Lambdas
+│       ├── handlers/           # Lambda handlers organized by domain
+│       │   ├── disputes/       # Dispute management
+│       │   ├── payments/       # Payment processing
+│       │   ├── qc/             # Quality control & AI validation
+│       │   ├── submissions/    # Submission handling
+│       │   ├── tasks/          # Task CRUD operations
+│       │   ├── wallet/         # Wallet & transactions
+│       │   └── workers/        # Worker gamification
+│       ├── shared/             # Shared Python modules
+│       │   ├── config.py       # Environment configuration
+│       │   ├── models.py       # Data models
+│       │   ├── auth.py         # Authentication utilities
+│       │   ├── dynamo.py       # DynamoDB helpers
+│       │   ├── ai_services.py  # AWS AI integrations
+│       │   └── utils.py        # Common utilities
+│       ├── tasks/              # TypeScript task handlers
+│       ├── media/              # Media upload handlers
+│       └── qc/                 # QC processing
 ├── frontend/
 │   └── src/
-│       ├── pages/          # React pages/components
-│       └── styles/         # CSS styles
+│       ├── components/         # Reusable React components
+│       │   ├── BoundingBoxEditor.tsx
+│       │   ├── DashboardMetrics.tsx
+│       │   └── TaskMedia.tsx
+│       ├── pages/              # React pages
+│       │   ├── AdminDashboard.tsx
+│       │   ├── RequesterDashboard.tsx
+│       │   ├── WorkerDashboard.tsx
+│       │   └── ...
+│       └── styles/             # CSS styles
 └── infrastructure/
-    └── lib/                # CDK stack definitions
-        ├── auth-stack.ts
-        ├── database-stack.ts
-        ├── api-stack.ts
-        ├── storage-stack.ts
-        ├── workflow-stack.ts
-        └── frontend-stack.ts
+    └── lib/                    # CDK stack definitions
+        ├── auth-stack.ts       # Cognito authentication
+        ├── database-stack.ts   # DynamoDB tables
+        ├── api-stack.ts        # API Gateway + Lambdas
+        ├── storage-stack.ts    # S3 buckets
+        ├── workflow-stack.ts   # Step Functions & SQS
+        ├── python-lambda-stack.ts  # Python Lambda functions
+        └── frontend-stack.ts   # CloudFront + S3
 ```
 
 ## 🚀 Deployment

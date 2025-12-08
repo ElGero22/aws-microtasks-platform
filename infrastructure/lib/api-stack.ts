@@ -16,6 +16,12 @@ interface ApiStackProps extends cdk.StackProps {
     submissionsTable: dynamodb.Table;
     submissionQueue: sqs.Queue;
     mediaBucket: s3.Bucket;
+    // Optional: Python lambdas from PythonLambdaStack
+    depositFundsLambda?: lambda.Function;
+    withdrawFundsLambda?: lambda.Function;
+    getWalletLambda?: lambda.Function;
+    startDisputeLambda?: lambda.Function;
+    adminReviewLambda?: lambda.Function;
 }
 
 export class ApiStack extends cdk.Stack {
@@ -194,6 +200,54 @@ export class ApiStack extends cdk.Stack {
         assignTaskRoute.addMethod('POST', new apigateway.LambdaIntegration(assignTaskLambda), {
             authorizer: platformAuthorizer,
         });
+
+        // ============ Wallet Endpoints (if lambdas provided) ============
+        if (props.depositFundsLambda || props.withdrawFundsLambda || props.getWalletLambda) {
+            const wallet = this.api.root.addResource('wallet');
+
+            if (props.getWalletLambda) {
+                // GET /wallet - Get user's wallet balance
+                wallet.addMethod('GET', new apigateway.LambdaIntegration(props.getWalletLambda), {
+                    authorizer: platformAuthorizer,
+                });
+            }
+
+            if (props.depositFundsLambda) {
+                const deposit = wallet.addResource('deposit');
+                // POST /wallet/deposit - Deposit funds (mock)
+                deposit.addMethod('POST', new apigateway.LambdaIntegration(props.depositFundsLambda), {
+                    authorizer: platformAuthorizer,
+                });
+            }
+
+            if (props.withdrawFundsLambda) {
+                const withdraw = wallet.addResource('withdraw');
+                // POST /wallet/withdraw - Withdraw funds (mock PayPal)
+                withdraw.addMethod('POST', new apigateway.LambdaIntegration(props.withdrawFundsLambda), {
+                    authorizer: platformAuthorizer,
+                });
+            }
+        }
+
+        // ============ Dispute Endpoints (if lambdas provided) ============
+        if (props.startDisputeLambda || props.adminReviewLambda) {
+            const disputes = this.api.root.addResource('disputes');
+
+            if (props.startDisputeLambda) {
+                // POST /disputes - Start a new dispute
+                disputes.addMethod('POST', new apigateway.LambdaIntegration(props.startDisputeLambda), {
+                    authorizer: platformAuthorizer,
+                });
+            }
+
+            if (props.adminReviewLambda) {
+                const resolve = disputes.addResource('resolve');
+                // POST /disputes/resolve - Admin resolve dispute
+                resolve.addMethod('POST', new apigateway.LambdaIntegration(props.adminReviewLambda), {
+                    authorizer: platformAuthorizer,
+                });
+            }
+        }
 
         // --- Outputs ---
         new cdk.CfnOutput(this, 'ApiUrl', {

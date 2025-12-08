@@ -7,6 +7,7 @@ Based on the task lifecycle: Created → Published → Assigned → Submitted �
 class TaskStatus:
     """Task lifecycle statuses."""
     CREATED = 'Created'
+    SCHEDULED = 'Scheduled'  # Waiting for publishAt time
     PUBLISHED = 'Published'
     ASSIGNED = 'Assigned'
     SUBMITTED = 'Submitted'
@@ -44,3 +45,31 @@ class WorkerLevel:
     NOVICE = 'Novice'
     INTERMEDIATE = 'Intermediate'
     EXPERT = 'Expert'
+
+
+class TransactionType:
+    """Transaction types for wallet operations."""
+    DEPOSIT = 'DEPOSIT'
+    WITHDRAWAL = 'WITHDRAWAL'
+    TASK_PAYMENT = 'TASK_PAYMENT'
+    PLATFORM_FEE = 'PLATFORM_FEE'
+    REFUND = 'REFUND'
+
+
+class Certification:
+    """Worker certifications for skill-based routing."""
+    IMAGE_LABELING = 'image-labeling'
+    AUDIO_TRANSCRIPTION = 'audio-transcription'
+    SENTIMENT_ANALYSIS = 'sentiment-analysis'
+    DATA_VALIDATION = 'data-validation'
+    BOUNDING_BOX = 'bounding-box'
+
+
+class TaskType:
+    """Supported task types."""
+    IMAGE_CLASSIFICATION = 'image-classification'
+    BOUNDING_BOX = 'bounding-box'
+    AUDIO_TRANSCRIPTION = 'audio-transcription'
+    SENTIMENT_LABELING = 'sentiment-labeling'
+    DATA_VALIDATION = 'data-validation'
+

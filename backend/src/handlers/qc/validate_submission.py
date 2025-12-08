@@ -3,6 +3,7 @@ QC Validation Handler - AI-Powered Quality Control with Majority Voting.
 Triggered by SQS (Validation Queue).
 
 Integrates with:
+- Fraud Detection for bots, copy-paste, and spam
 - Amazon Rekognition for image-classification tasks
 - Amazon Transcribe for audio-transcription tasks
 - Amazon SageMaker for custom ML models (optional)
@@ -16,6 +17,7 @@ from boto3.dynamodb.conditions import Key
 from shared.config import config
 from shared.models import SubmissionStatus, TaskStatus
 from shared.utils import text_similarity, normalize_text
+from shared.fraud_detection import FraudDetector
 from shared.ai_services import (
     detect_labels,
     compare_labels_with_answer,
@@ -214,6 +216,7 @@ def evaluate_submission(submission_id, task_id, worker_id, worker_answer):
     Evaluate a submission using AI services and/or consensus voting.
     
     Flow:
+    0. Fraud detection check (bots, copy-paste, spam)
     1. Gold standard tasks: Process individually (bypass consensus)
     2. Regular tasks: Wait for quorum, then apply majority voting
     """
@@ -233,7 +236,37 @@ def evaluate_submission(submission_id, task_id, worker_id, worker_answer):
     print(f"Running QC for submission {submission_id}, task type: {task_type}")
 
     # =========================================================================
-    # Gold Standard Check (always processed individually, bypasses consensus)
+    # STEP 0: FRAUD DETECTION
+    # =========================================================================
+    try:
+        fraud_result = FraudDetector.check_submission(
+            worker_id=worker_id,
+            answer=str(worker_answer),
+            task_type=task_type,
+            task_id=task_id
+        )
+        
+        if FraudDetector.should_flag(fraud_result):
+            reason = FraudDetector.get_rejection_reason(fraud_result)
+            print(f"FRAUD DETECTED for submission {submission_id}: {fraud_result}")
+            
+            update_submission_status(
+                submission_id,
+                SubmissionStatus.REJECTED,
+                reason,
+                ai_confidence=0.0
+            )
+            emit_qc_event(submission_id, task_id, SubmissionStatus.REJECTED, 0.0, reason)
+            return
+        else:
+            print(f"Fraud check passed: score={fraud_result.get('fraud_score', 0)}")
+            
+    except Exception as e:
+        print(f"Fraud detection error (non-fatal): {e}")
+        # Continue with QC even if fraud detection fails
+
+    # =========================================================================
+    # STEP 1: Gold Standard Check (always processed individually)
     # =========================================================================
     if task.get('isGold'):
         gold_answer = task.get('goldAnswer')

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { apiConfig } from '../aws-config';
 import '../styles/dashboard.css';
+import { MetricsCard, EarningsBreakdown, Leaderboard, PerformanceChart } from '../components/DashboardMetrics';
 import { TaskMedia } from '../components/TaskMedia';
 
 export function WorkerDashboard() {
@@ -9,6 +10,31 @@ export function WorkerDashboard() {
     const [loading, setLoading] = useState(true);
     const [submissionMessage, setSubmissionMessage] = useState('');
     const [submittingId, setSubmittingId] = useState<string | null>(null);
+    const [showStats, setShowStats] = useState(true);
+
+    // Mock stats for demo
+    const [workerStats] = useState({
+        earnings: { today: 12.50, week: 87.25, month: 342.00, total: 1245.75 },
+        tasksCompleted: 156,
+        accuracy: 94.2,
+        level: 'Expert',
+        weeklyData: [
+            { date: 'Mon', value: 15 },
+            { date: 'Tue', value: 22 },
+            { date: 'Wed', value: 18 },
+            { date: 'Thu', value: 25 },
+            { date: 'Fri', value: 31 },
+            { date: 'Sat', value: 12 },
+            { date: 'Sun', value: 8 },
+        ],
+        leaderboard: [
+            { rank: 1, name: 'Carlos M.', earnings: 425.50, tasksCompleted: 312, accuracy: 98.5 },
+            { rank: 2, name: 'María L.', earnings: 380.25, tasksCompleted: 287, accuracy: 97.2 },
+            { rank: 3, name: 'Juan P.', earnings: 342.00, tasksCompleted: 256, accuracy: 96.8, isCurrentUser: true },
+            { rank: 4, name: 'Ana S.', earnings: 298.75, tasksCompleted: 234, accuracy: 95.5 },
+            { rank: 5, name: 'Luis R.', earnings: 267.50, tasksCompleted: 198, accuracy: 94.1 },
+        ]
+    });
 
 
     useEffect(() => {
@@ -125,6 +151,78 @@ export function WorkerDashboard() {
 
     return (
         <div className="dashboard-container">
+            {/* Stats Section */}
+            {showStats && (
+                <div style={{ marginBottom: '2rem' }}>
+                    {/* Quick Stats Row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+                        <MetricsCard
+                            title="Today's Earnings"
+                            value={`$${workerStats.earnings.today.toFixed(2)}`}
+                            icon="💰"
+                            color="success"
+                            trend={{ value: 15, isPositive: true }}
+                        />
+                        <MetricsCard
+                            title="Tasks Completed"
+                            value={workerStats.tasksCompleted}
+                            icon="✅"
+                            color="primary"
+                            subtitle="All time"
+                        />
+                        <MetricsCard
+                            title="Accuracy Rate"
+                            value={`${workerStats.accuracy}%`}
+                            icon="🎯"
+                            color="secondary"
+                        />
+                        <MetricsCard
+                            title="Worker Level"
+                            value={workerStats.level}
+                            icon="⭐"
+                            color="warning"
+                        />
+                    </div>
+
+                    {/* Detailed Stats Row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                        <EarningsBreakdown {...workerStats.earnings} />
+                        <PerformanceChart data={workerStats.weeklyData} title="Tasks This Week" color="#22c55e" />
+                        <Leaderboard entries={workerStats.leaderboard} />
+                    </div>
+
+                    <button
+                        onClick={() => setShowStats(false)}
+                        style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            marginTop: '1rem',
+                            fontSize: '0.8rem'
+                        }}
+                    >
+                        ▲ Hide Stats
+                    </button>
+                </div>
+            )}
+
+            {!showStats && (
+                <button
+                    onClick={() => setShowStats(true)}
+                    style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        marginBottom: '1rem',
+                        fontSize: '0.8rem'
+                    }}
+                >
+                    ▼ Show Stats
+                </button>
+            )}
+
             <div className="header">
                 <h3>Tareas Disponibles</h3>
                 <button className="btn-secondary" onClick={loadTasks}>Actualizar Lista</button>

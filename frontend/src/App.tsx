@@ -5,6 +5,8 @@ import { RequesterDashboard } from './pages/RequesterDashboard';
 import { RequesterMyTasks } from './pages/RequesterMyTasks';
 import { WorkerDashboard } from './pages/WorkerDashboard';
 import { WorkerMyTasks } from './pages/WorkerMyTasks';
+import { AdminDashboard } from './pages/AdminDashboard';
+import { WorkerDemoPreview } from './pages/WorkerDemoPreview';
 import '@aws-amplify/ui-react/styles.css';
 import './styles/dashboard.css';
 
@@ -46,6 +48,13 @@ function Landing() {
           </div>
         </Link>
       </div>
+
+      {/* Admin Link */}
+      <div style={{ marginTop: '3rem' }}>
+        <Link to="/admin" style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textDecoration: 'none' }}>
+          🛡️ Admin Dashboard
+        </Link>
+      </div>
     </div>
   );
 }
@@ -63,9 +72,12 @@ function App() {
           <Route index element={<WorkerDashboard />} />
           <Route path="my-tasks" element={<WorkerMyTasks />} />
         </Route>
+        <Route path="/worker/demo" element={<WorkerDemoPreview />} />
+        <Route path="/admin" element={<AdminDashboard />} />
       </Routes>
     </BrowserRouter>
   );
 }
 
 export default App;
+

@@ -33,6 +33,7 @@ export class PythonLambdaStack extends cdk.Stack {
     public readonly listAvailableTasksLambda: lambda.Function;
     public readonly assignTaskLambda: lambda.Function;
     public readonly processTranscriptionLambda: lambda.Function;
+    public readonly expireAssignmentsLambda: lambda.Function;
 
     // Submission handlers
     public readonly submitWorkLambda: lambda.Function;
@@ -43,12 +44,16 @@ export class PythonLambdaStack extends cdk.Stack {
     // Dispute handlers
     public readonly startDisputeLambda: lambda.Function;
     public readonly resolveDisputeLambda: lambda.Function;
+    public readonly adminReviewLambda: lambda.Function;
+    public readonly autoResolveDisputesLambda: lambda.Function;
 
     // Payment handlers
     public readonly processPaymentLambda: lambda.Function;
 
     // Wallet handlers
     public readonly getWalletLambda: lambda.Function;
+    public readonly depositFundsLambda: lambda.Function;
+    public readonly withdrawFundsLambda: lambda.Function;
 
     // Worker/Gamification handlers
     public readonly updateWorkerStatsLambda: lambda.Function;
@@ -293,6 +298,27 @@ export class PythonLambdaStack extends cdk.Stack {
         );
         props.walletTable.grantReadData(this.getWalletLambda);
 
+        this.depositFundsLambda = createPythonLambda(
+            'DepositFundsFn',
+            'wallet',
+            'deposit_funds'
+        );
+        props.walletTable.grantReadWriteData(this.depositFundsLambda);
+        props.transactionsTable.grantWriteData(this.depositFundsLambda);
+
+        this.withdrawFundsLambda = createPythonLambda(
+            'WithdrawFundsFn',
+            'wallet',
+            'withdraw_funds'
+        );
+        props.walletTable.grantReadWriteData(this.withdrawFundsLambda);
+        props.transactionsTable.grantWriteData(this.withdrawFundsLambda);
+        // SES permission for email notifications
+        this.withdrawFundsLambda.addToRolePolicy(new iam.PolicyStatement({
+            actions: ['ses:SendEmail'],
+            resources: ['*'],
+        }));
+
         // ============ Worker/Gamification Handlers ============
 
         this.updateWorkerStatsLambda = createPythonLambda(
@@ -308,7 +334,6 @@ export class PythonLambdaStack extends cdk.Stack {
                 startingPosition: lambda.StartingPosition.TRIM_HORIZON,
                 batchSize: 10,
                 retryAttempts: 3,
-                // Filter to only process MODIFY events (status changes)
                 filters: [
                     lambda.FilterCriteria.filter({
                         eventName: lambda.FilterRule.isEqual('MODIFY'),
@@ -316,6 +341,55 @@ export class PythonLambdaStack extends cdk.Stack {
                 ],
             })
         );
+
+        // ============ Additional Dispute Handlers ============
+
+        this.adminReviewLambda = createPythonLambda(
+            'AdminReviewFn',
+            'disputes',
+            'admin_review'
+        );
+        props.disputesTable.grantReadWriteData(this.adminReviewLambda);
+        props.submissionsTable.grantReadWriteData(this.adminReviewLambda);
+
+        this.autoResolveDisputesLambda = createPythonLambda(
+            'AutoResolveDisputesFn',
+            'disputes',
+            'auto_resolve_disputes'
+        );
+        props.disputesTable.grantReadWriteData(this.autoResolveDisputesLambda);
+        props.submissionsTable.grantReadWriteData(this.autoResolveDisputesLambda);
+
+        // ============ Task Expiration Handler ============
+
+        this.expireAssignmentsLambda = createPythonLambda(
+            'ExpireAssignmentsFn',
+            'tasks',
+            'expire_assignments'
+        );
+        props.assignmentsTable.grantReadWriteData(this.expireAssignmentsLambda);
+        props.tasksTable.grantReadWriteData(this.expireAssignmentsLambda);
+
+        // ============ EventBridge Scheduled Rules ============
+
+        // Rule: Expire stale assignments every 1 minute
+        new events.Rule(this, 'ExpireAssignmentsRule', {
+            ruleName: 'expire-stale-assignments',
+            description: 'Expire task assignments older than 10 minutes',
+            schedule: events.Schedule.rate(cdk.Duration.minutes(1)),
+            targets: [new targets.LambdaFunction(this.expireAssignmentsLambda, {
+                retryAttempts: 2,
+            })],
+        });
+
+        // Rule: Auto-resolve disputes daily
+        new events.Rule(this, 'AutoResolveDisputesRule', {
+            ruleName: 'auto-resolve-disputes-daily',
+            description: 'Auto-approve disputes older than 3 days',
+            schedule: events.Schedule.rate(cdk.Duration.hours(24)),
+            targets: [new targets.LambdaFunction(this.autoResolveDisputesLambda, {
+                retryAttempts: 2,
+            })],
+        });
     }
 }
-

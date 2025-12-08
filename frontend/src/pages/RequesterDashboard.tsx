@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { apiConfig } from '../aws-config';
 import '../styles/dashboard.css';
+import { MetricsCard, BudgetTracker, PerformanceChart, ExportButton } from '../components/DashboardMetrics';
 
 export function RequesterDashboard() {
     const [formData, setFormData] = useState({
@@ -20,6 +21,30 @@ export function RequesterDashboard() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [showStats, setShowStats] = useState(true);
+
+    // Mock stats for demo
+    const [requesterStats] = useState({
+        budget: { total: 500.00, spent: 245.50, pending: 78.25 },
+        tasksPublished: 45,
+        tasksCompleted: 38,
+        avgQuality: 92.5,
+        throughput: 12.4, // tasks per hour
+        weeklyData: [
+            { date: 'Mon', value: 8 },
+            { date: 'Tue', value: 12 },
+            { date: 'Wed', value: 15 },
+            { date: 'Thu', value: 10 },
+            { date: 'Fri', value: 18 },
+            { date: 'Sat', value: 5 },
+            { date: 'Sun', value: 3 },
+        ],
+        recentTasks: [
+            { taskId: 't-001', title: 'Image Classification Batch', status: 'Completed', submissions: 50, approved: 47 },
+            { taskId: 't-002', title: 'Audio Transcription', status: 'In Progress', submissions: 23, approved: 20 },
+            { taskId: 't-003', title: 'Sentiment Analysis', status: 'In Progress', submissions: 15, approved: 12 },
+        ]
+    });
 
     // Cleanup preview URL to avoid memory leaks
     useEffect(() => {
@@ -158,6 +183,118 @@ export function RequesterDashboard() {
 
     return (
         <div className="dashboard-container">
+            {/* Stats Section */}
+            {showStats && (
+                <div style={{ marginBottom: '2rem' }}>
+                    {/* Quick Stats Row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+                        <MetricsCard
+                            title="Tasks Published"
+                            value={requesterStats.tasksPublished}
+                            icon="📝"
+                            color="primary"
+                            trend={{ value: 12, isPositive: true }}
+                        />
+                        <MetricsCard
+                            title="Completed"
+                            value={requesterStats.tasksCompleted}
+                            icon="✅"
+                            color="success"
+                            subtitle={`${((requesterStats.tasksCompleted / requesterStats.tasksPublished) * 100).toFixed(0)}% completion`}
+                        />
+                        <MetricsCard
+                            title="Avg Quality"
+                            value={`${requesterStats.avgQuality}%`}
+                            icon="⭐"
+                            color="warning"
+                        />
+                        <MetricsCard
+                            title="Throughput"
+                            value={`${requesterStats.throughput}/hr`}
+                            icon="⚡"
+                            color="secondary"
+                            subtitle="Tasks completed per hour"
+                        />
+                    </div>
+
+                    {/* Detailed Stats Row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <BudgetTracker {...requesterStats.budget} />
+                        <PerformanceChart data={requesterStats.weeklyData} title="Tasks Completed This Week" color="var(--primary-color)" />
+                    </div>
+
+                    {/* Recent Tasks with Export */}
+                    <div className="card" style={{ padding: '1.5rem', borderRadius: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h4 style={{ margin: 0, color: 'var(--text-color)' }}>📋 Recent Tasks</h4>
+                            <ExportButton data={requesterStats.recentTasks} filename="tasks-export" label="Export" />
+                        </div>
+                        <table style={{ width: '100%', fontSize: '0.9rem' }}>
+                            <thead>
+                                <tr style={{ color: 'var(--text-muted)', textAlign: 'left' }}>
+                                    <th style={{ padding: '0.5rem 0' }}>Task</th>
+                                    <th>Status</th>
+                                    <th>Submissions</th>
+                                    <th>Approved</th>
+                                    <th>Approval Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {requesterStats.recentTasks.map(task => (
+                                    <tr key={task.taskId} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <td style={{ padding: '0.75rem 0' }}>{task.title}</td>
+                                        <td>
+                                            <span style={{
+                                                padding: '0.25rem 0.5rem',
+                                                borderRadius: '999px',
+                                                fontSize: '0.75rem',
+                                                background: task.status === 'Completed' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(99, 102, 241, 0.2)',
+                                                color: task.status === 'Completed' ? '#22c55e' : 'var(--primary-color)'
+                                            }}>
+                                                {task.status}
+                                            </span>
+                                        </td>
+                                        <td>{task.submissions}</td>
+                                        <td>{task.approved}</td>
+                                        <td style={{ color: '#22c55e' }}>{((task.approved / task.submissions) * 100).toFixed(0)}%</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <button
+                        onClick={() => setShowStats(false)}
+                        style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            marginTop: '1rem',
+                            fontSize: '0.8rem'
+                        }}
+                    >
+                        ▲ Hide Stats
+                    </button>
+                </div>
+            )}
+
+            {!showStats && (
+                <button
+                    onClick={() => setShowStats(true)}
+                    style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        marginBottom: '1rem',
+                        fontSize: '0.8rem'
+                    }}
+                >
+                    ▼ Show Stats & Analytics
+                </button>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'start' }}>
 
                 {/* Left Column: Creation Form */}
@@ -278,6 +415,9 @@ export function RequesterDashboard() {
                                     step="0.01"
                                     min="0.01"
                                 />
+                                <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                    💡 20% platform fee applies
+                                </small>
                             </div>
 
                             <div className="form-group">
