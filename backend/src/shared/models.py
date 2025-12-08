@@ -18,6 +18,7 @@ class TaskStatus:
 class SubmissionStatus:
     """Submission review statuses."""
     PENDING = 'Pending'
+    PENDING_CONSENSUS = 'PendingConsensus'  # Awaiting quorum for majority voting
     APPROVED = 'Approved'
     REJECTED = 'Rejected'
     DISPUTED = 'Disputed'

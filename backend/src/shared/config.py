@@ -35,6 +35,9 @@ class Config:
     REKOGNITION_MIN_CONFIDENCE = float(os.environ.get('REKOGNITION_MIN_CONFIDENCE', '90'))
     TRANSCRIBE_LANGUAGE = os.environ.get('TRANSCRIBE_LANGUAGE', 'es-ES')
     TEXT_SIMILARITY_THRESHOLD = float(os.environ.get('TEXT_SIMILARITY_THRESHOLD', '0.85'))
+    
+    # Consensus (Majority Voting) Configuration
+    CONSENSUS_QUORUM = int(os.environ.get('CONSENSUS_QUORUM', '3'))  # Submissions required for voting
 
 
 config = Config()
