@@ -69,6 +69,14 @@ export function RequesterMyTasks() {
         }
     };
 
+    const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+    const [selectedTaskTitle, setSelectedTaskTitle] = useState<string>('');
+
+    const openReview = (taskId: string, title: string) => {
+        setSelectedTaskId(taskId);
+        setSelectedTaskTitle(title);
+    };
+
     if (loading) return (
         <div className="dashboard-container" style={{ textAlign: 'center', paddingTop: '4rem' }}>
             <div style={{ color: 'var(--text-muted)' }}>Cargando tus tareas...</div>
@@ -120,13 +128,25 @@ export function RequesterMyTasks() {
                             <span>📊 {task.status || 'AVAILABLE'}</span>
                         </div>
 
-                        <button
-                            className="btn-secondary"
-                            onClick={() => handleDeleteTask(task.taskId)}
-                            style={{ width: '100%', background: 'rgba(220, 38, 38, 0.1)', color: '#ef4444' }}
-                        >
-                            🗑️ Eliminar Tarea
-                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {(task.status && task.status !== 'AVAILABLE') && (
+                                <button
+                                    className="btn-primary"
+                                    onClick={() => openReview(task.taskId, task.title)}
+                                    style={{ width: '100%', background: '#3b82f6' }}
+                                >
+                                    📝 Revisar Entrega
+                                </button>
+                            )}
+
+                            <button
+                                className="btn-secondary"
+                                onClick={() => handleDeleteTask(task.taskId)}
+                                style={{ width: '100%', background: 'rgba(220, 38, 38, 0.1)', color: '#ef4444' }}
+                            >
+                                🗑️ Eliminar Tarea
+                            </button>
+                        </div>
                     </div>
                 ))}
             </div>
@@ -141,6 +161,19 @@ export function RequesterMyTasks() {
                     </p>
                 </div>
             )}
+
+            {selectedTaskId && (
+                <SubmissionReviewModal
+                    taskId={selectedTaskId}
+                    taskTitle={selectedTaskTitle}
+                    onClose={() => {
+                        setSelectedTaskId(null);
+                        loadMyTasks(); // Reload to see status updates
+                    }}
+                />
+            )}
         </div>
     );
 }
+
+import { SubmissionReviewModal } from '../components/SubmissionReviewModal';

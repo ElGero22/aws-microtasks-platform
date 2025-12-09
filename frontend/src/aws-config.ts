@@ -1,12 +1,12 @@
 export const authConfig = {
     Auth: {
         Cognito: {
-            userPoolId: import.meta.env.VITE_PLATFORM_USER_POOL_ID,
-            userPoolClientId: import.meta.env.VITE_PLATFORM_CLIENT_ID,
+            userPoolId: 'us-east-1_YU3m3654d',
+            userPoolClientId: 'apk4sp6hmdglbl9mvvog6q2uv',
         },
     },
 };
 
 export const apiConfig = {
-    endpoint: import.meta.env.VITE_API_URL,
+    endpoint: 'https://ltphln9egc.execute-api.us-east-1.amazonaws.com/prod/',
 };

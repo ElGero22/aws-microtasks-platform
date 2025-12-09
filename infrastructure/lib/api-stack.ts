@@ -9,6 +9,7 @@ import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as path from 'path';
 
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as iam from 'aws-cdk-lib/aws-iam';
 
 interface ApiStackProps extends cdk.StackProps {
     userPool: cognito.UserPool;
@@ -16,6 +17,8 @@ interface ApiStackProps extends cdk.StackProps {
     submissionsTable: dynamodb.Table;
     submissionQueue: sqs.Queue;
     mediaBucket: s3.Bucket;
+    workersTable: dynamodb.Table;
+    requestersTable: dynamodb.Table;
     // Optional: Python lambdas from PythonLambdaStack
     depositFundsLambda?: lambda.Function;
     withdrawFundsLambda?: lambda.Function;
@@ -86,22 +89,41 @@ export class ApiStack extends cdk.Stack {
         });
         props.tasksTable.grantReadData(listTasksLambda);
 
-        // Submit Work
-        const submitWorkLambda = new nodejs.NodejsFunction(this, 'SubmitWorkFunction', {
+
+
+        // Get Leaderboard
+        const getLeaderboardLambda = new nodejs.NodejsFunction(this, 'GetLeaderboardFunction', {
             runtime: lambda.Runtime.NODEJS_18_X,
-            entry: path.join(__dirname, '../../backend/src/submissions/submit-work.ts'),
+            entry: path.join(__dirname, '../../backend/src/workers/get-leaderboard.ts'),
             handler: 'handler',
             environment: {
-                SUBMISSIONS_TABLE: props.submissionsTable.tableName,
-                SUBMISSION_QUEUE_URL: props.submissionQueue.queueUrl,
-                TASKS_TABLE: props.tasksTable.tableName,
+                WORKERS_TABLE: props.workersTable.tableName,
             },
         });
-        props.submissionsTable.grantWriteData(submitWorkLambda);
-        props.submissionQueue.grantSendMessages(submitWorkLambda);
-        props.tasksTable.grantWriteData(submitWorkLambda);
+        props.workersTable.grantReadData(getLeaderboardLambda);
+
+        // Assign Role
+        const assignRoleLambda = new nodejs.NodejsFunction(this, 'AssignRoleFunction', {
+            runtime: lambda.Runtime.NODEJS_18_X,
+            entry: path.join(__dirname, '../../backend/src/auth/assign-role.ts'),
+            handler: 'handler',
+            environment: {
+                WORKERS_TABLE: props.workersTable.tableName,
+                REQUESTERS_TABLE: props.requestersTable.tableName,
+            },
+        });
+        props.workersTable.grantReadWriteData(assignRoleLambda);
+        props.requestersTable.grantReadWriteData(assignRoleLambda);
+
 
         // --- API Resources ---
+
+        const auth = this.api.root.addResource('auth');
+        const role = auth.addResource('role');
+        // POST /auth/role
+        role.addMethod('POST', new apigateway.LambdaIntegration(assignRoleLambda), {
+            authorizer: platformAuthorizer,
+        });
 
         const tasks = this.api.root.addResource('tasks');
         // POST /tasks (Any authenticated user can create tasks)
@@ -113,9 +135,67 @@ export class ApiStack extends cdk.Stack {
             authorizer: platformAuthorizer,
         });
 
+        const submitWorkLambda = new nodejs.NodejsFunction(this, 'SubmitWorkFunction', {
+            runtime: lambda.Runtime.NODEJS_20_X,
+            handler: 'handler',
+            entry: path.join(__dirname, '../../backend/src/submissions/submit-work.ts'),
+            environment: {
+                SUBMISSIONS_TABLE: props.submissionsTable.tableName,
+                TASKS_TABLE: props.tasksTable.tableName,
+                REQUESTERS_TABLE: props.requestersTable.tableName,
+                SUBMISSION_QUEUE_URL: props.submissionQueue.queueUrl,
+            },
+        });
+        props.submissionsTable.grantWriteData(submitWorkLambda);
+        props.tasksTable.grantReadWriteData(submitWorkLambda);
+        props.requestersTable.grantReadData(submitWorkLambda);
+        props.submissionQueue.grantSendMessages(submitWorkLambda);
+
+        // Grant SES Permissions
+        submitWorkLambda.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+            resources: ['*'], // In production, restrict to verified identities
+        }));
+
         const submissions = this.api.root.addResource('submissions');
         // POST /submissions (Any authenticated user can submit work)
         submissions.addMethod('POST', new apigateway.LambdaIntegration(submitWorkLambda), {
+            authorizer: platformAuthorizer,
+        });
+
+        // List Submissions by Task
+        const listTaskSubmissionsLambda = new nodejs.NodejsFunction(this, 'ListTaskSubmissionsFunction', {
+            runtime: lambda.Runtime.NODEJS_20_X,
+            handler: 'handler',
+            entry: path.join(__dirname, '../../backend/src/submissions/list-by-task.ts'),
+            environment: {
+                SUBMISSIONS_TABLE: props.submissionsTable.tableName,
+                TASKS_TABLE: props.tasksTable.tableName,
+            },
+        });
+        props.submissionsTable.grantReadData(listTaskSubmissionsLambda);
+        props.tasksTable.grantReadData(listTaskSubmissionsLambda);
+
+        // Review Submission
+        const reviewSubmissionLambda = new nodejs.NodejsFunction(this, 'ReviewSubmissionFunction', {
+            runtime: lambda.Runtime.NODEJS_20_X,
+            handler: 'handler',
+            entry: path.join(__dirname, '../../backend/src/submissions/review.ts'),
+            environment: {
+                SUBMISSIONS_TABLE: props.submissionsTable.tableName,
+                TASKS_TABLE: props.tasksTable.tableName,
+            },
+        });
+        props.submissionsTable.grantReadWriteData(reviewSubmissionLambda);
+        props.tasksTable.grantReadData(reviewSubmissionLambda);
+
+
+
+        // POST /submissions/{submissionId}/review
+        const submissionById = submissions.addResource('{submissionId}');
+        const reviewSubmission = submissionById.addResource('review');
+        reviewSubmission.addMethod('POST', new apigateway.LambdaIntegration(reviewSubmissionLambda), {
             authorizer: platformAuthorizer,
         });
 
@@ -167,6 +247,32 @@ export class ApiStack extends cdk.Stack {
             authorizer: platformAuthorizer,
         });
 
+        // GET /tasks/{taskId}/submissions
+        const taskSubmissions = taskById.addResource('submissions');
+        taskSubmissions.addMethod('GET', new apigateway.LambdaIntegration(listTaskSubmissionsLambda), {
+            authorizer: platformAuthorizer,
+        });
+
+        // --- Decline Task ---
+        const declineTaskLambda = new nodejs.NodejsFunction(this, 'DeclineTaskFunction', {
+            runtime: lambda.Runtime.NODEJS_20_X,
+            handler: 'handler',
+            entry: path.join(__dirname, '../../backend/src/tasks/decline-task.ts'),
+            environment: {
+                TASKS_TABLE: props.tasksTable.tableName,
+                WORKERS_TABLE: props.workersTable.tableName,
+            },
+        });
+        props.tasksTable.grantReadWriteData(declineTaskLambda);
+        props.workersTable.grantReadWriteData(declineTaskLambda);
+
+        const declineTask = taskById.addResource('decline');
+        declineTask.addMethod('POST', new apigateway.LambdaIntegration(declineTaskLambda), {
+            authorizer: platformAuthorizer,
+        });
+
+
+
         // --- Media Upload ---
         const uploadMediaLambda = new nodejs.NodejsFunction(this, 'UploadMediaFunction', {
             runtime: lambda.Runtime.NODEJS_20_X,
@@ -200,6 +306,13 @@ export class ApiStack extends cdk.Stack {
         assignTaskRoute.addMethod('POST', new apigateway.LambdaIntegration(assignTaskLambda), {
             authorizer: platformAuthorizer,
         });
+
+        // --- Leaderboard ---
+        const leaderboard = this.api.root.addResource('leaderboard');
+        leaderboard.addMethod('GET', new apigateway.LambdaIntegration(getLeaderboardLambda), {
+            authorizer: platformAuthorizer,
+        });
+
 
         // ============ Wallet Endpoints (if lambdas provided) ============
         if (props.depositFundsLambda || props.withdrawFundsLambda || props.getWalletLambda) {

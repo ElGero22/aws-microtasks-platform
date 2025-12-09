@@ -61,17 +61,20 @@ def process_record(record) -> bool:
         print("No workerId found in record")
         return False
 
+    task_id = new_image.get('taskId', {}).get('S')
+
     if new_status == SubmissionStatus.APPROVED:
-        update_worker_stats(worker_id, is_approved=True)
+        update_worker_stats(worker_id, is_approved=True, task_id=task_id)
         return True
     elif new_status == SubmissionStatus.REJECTED:
-        update_worker_stats(worker_id, is_approved=False)
+        update_worker_stats(worker_id, is_approved=False, task_id=task_id)
         return True
     
     return False
 
 
-def update_worker_stats(worker_id: str, is_approved: bool):
+
+def update_worker_stats(worker_id: str, is_approved: bool, task_id: str = None):
     """
     Update worker statistics and recalculate level.
     Uses atomic operations to prevent race conditions.
@@ -79,34 +82,53 @@ def update_worker_stats(worker_id: str, is_approved: bool):
     Args:
         worker_id: The worker's ID
         is_approved: True if submission was approved, False if rejected
+        task_id: The task ID (optional, used for fetching reward)
     """
     workers_table = dynamodb.Table(config.WORKERS_TABLE)
     timestamp = datetime.now(timezone.utc).isoformat()
 
-    # First, atomically increment counters
-    if is_approved:
-        update_expr = 'ADD tasksSubmitted :one, tasksApproved :one SET updatedAt = :ts'
-    else:
-        update_expr = 'ADD tasksSubmitted :one SET updatedAt = :ts'
-
     try:
+        # Fetch task to get reward if approved
+        reward_amount = Decimal('0')
+        if is_approved and task_id:
+            try:
+                tasks_table = dynamodb.Table(config.TASKS_TABLE)
+                task_resp = tasks_table.get_item(Key={'taskId': task_id})
+                task_item = task_resp.get('Item', {})
+                # Match the wallet logic: 80% to worker
+                full_reward = Decimal(str(task_item.get('reward', '0')))
+                reward_amount = full_reward * Decimal('0.8')
+            except Exception as e:
+                print(f"Error fetching task {task_id}: {e}")
+
         # Use UpdateItem with ADD to atomically increment
-        # This also creates the item if it doesn't exist (upsert)
+        if is_approved:
+             update_expr = 'ADD tasksSubmitted :one, tasksApproved :one, earnings :reward SET updatedAt = :ts'
+             attrs = {
+                ':one': 1,
+                ':reward': reward_amount,
+                ':ts': timestamp
+            }
+        else:
+             update_expr = 'ADD tasksSubmitted :one SET updatedAt = :ts'
+             attrs = {
+                ':one': 1,
+                ':ts': timestamp
+            }
+
         response = workers_table.update_item(
             Key={'workerId': worker_id},
             UpdateExpression=update_expr,
-            ExpressionAttributeValues={
-                ':one': 1,
-                ':ts': timestamp
-            },
+            ExpressionAttributeValues=attrs,
             ReturnValues='ALL_NEW'
         )
 
         updated_item = response.get('Attributes', {})
         tasks_submitted = int(updated_item.get('tasksSubmitted', 0))
         tasks_approved = int(updated_item.get('tasksApproved', 0))
+        current_earnings = updated_item.get('earnings', 0)
 
-        print(f"Updated worker {worker_id}: submitted={tasks_submitted}, approved={tasks_approved}")
+        print(f"Updated worker {worker_id}: submitted={tasks_submitted}, approved={tasks_approved}, earnings={current_earnings}")
 
         # Calculate accuracy and level
         if tasks_submitted > 0:

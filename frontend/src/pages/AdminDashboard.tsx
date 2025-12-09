@@ -126,6 +126,51 @@ export function AdminDashboard() {
         return `${Math.floor(seconds / 86400)} days ago`;
     };
 
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [passwordInput, setPasswordInput] = useState('');
+    const [authError, setAuthError] = useState('');
+
+    const handleLogin = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (passwordInput === 'ALCIDEStupapa123') {
+            setIsAuthenticated(true);
+            setAuthError('');
+        } else {
+            setAuthError('Incorrect password');
+        }
+    };
+
+    if (!isAuthenticated) {
+        return (
+            <div className="dashboard-container" style={{
+                minHeight: '100vh',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                paddingTop: 0
+            }}>
+                <div className="card" style={{ padding: '2rem', width: '100%', maxWidth: '400px', textAlign: 'center' }}>
+                    <h2 style={{ marginBottom: '1.5rem' }}>Admin Access Required</h2>
+                    <form onSubmit={handleLogin}>
+                        <input
+                            type="password"
+                            value={passwordInput}
+                            onChange={(e) => setPasswordInput(e.target.value)}
+                            placeholder="Enter Admin Password"
+                            className="form-input"
+                            style={{ marginBottom: '1rem', width: '100%' }}
+                        />
+                        {authError && <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{authError}</div>}
+                        <button type="submit" className="btn-primary" style={{ width: '100%' }}>
+                            Unlock Dashboard
+                        </button>
+                    </form>
+                </div>
+            </div>
+        );
+    }
+
     if (loading) {
         return (
             <div className="dashboard-container" style={{ textAlign: 'center', paddingTop: '4rem' }}>

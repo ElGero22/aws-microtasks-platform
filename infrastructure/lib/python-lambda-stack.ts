@@ -327,6 +327,7 @@ export class PythonLambdaStack extends cdk.Stack {
             'update_worker_stats'
         );
         props.workersTable.grantReadWriteData(this.updateWorkerStatsLambda);
+        props.tasksTable.grantReadData(this.updateWorkerStatsLambda);
 
         // DynamoDB Stream trigger: process Approved/Rejected submissions
         this.updateWorkerStatsLambda.addEventSource(

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+
 import '../styles/dashboard.css';
 
 interface MetricsCardProps {

@@ -1,16 +1,20 @@
 import { APIGatewayProxyHandler } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { v4 as uuidv4 } from 'uuid';
 
 const dbClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(dbClient);
 const sqsClient = new SQSClient({});
+const sesClient = new SESClient({});
 
 const SUBMISSIONS_TABLE = process.env.SUBMISSIONS_TABLE || '';
 const TASKS_TABLE = process.env.TASKS_TABLE || '';
+const REQUESTERS_TABLE = process.env.REQUESTERS_TABLE || '';
 const SUBMISSION_QUEUE_URL = process.env.SUBMISSION_QUEUE_URL || '';
+const SENDER_EMAIL = 'no-reply@microtasks.com'; // In production, this must be a verified sender
 
 export const handler: APIGatewayProxyHandler = async (event) => {
     try {
@@ -26,7 +30,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         }
 
         const body = JSON.parse(event.body);
-        const { taskId, workerId, mediaUrl } = body; // Extract mediaUrl
+        const { taskId, workerId, mediaUrl } = body;
 
         if (!taskId || !workerId) {
             return {
@@ -47,7 +51,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ...body,
             submittedAt: timestamp,
             status: 'PENDING_QC',
-            // mediaUrl will be included via ...body if present
         };
 
         // 1. Save to Submissions Table
@@ -56,8 +59,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             Item: submission,
         }));
 
-        // 2. Update Task Status to SUBMITTED
-        // We use a condition to ensure the task is still assigned to this worker
+        // 2. Update Task Status and Notify Requester
         try {
             await docClient.send(new UpdateCommand({
                 TableName: TASKS_TABLE,
@@ -72,11 +74,48 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     ':workerId': workerId
                 }
             }));
+
+            // --- NOTIFICATION LOGIC ---
+            if (REQUESTERS_TABLE) {
+                // A. Get Task to find Creator
+                const taskResult = await docClient.send(new GetCommand({
+                    TableName: TASKS_TABLE,
+                    Key: { taskId }
+                }));
+                const task = taskResult.Item;
+                const requesterId = task?.requesterId;
+
+                if (requesterId) {
+                    // B. Get Requester Email
+                    const reqResult = await docClient.send(new GetCommand({
+                        TableName: REQUESTERS_TABLE,
+                        Key: { requesterId }
+                    }));
+                    const requesterEmail = reqResult.Item?.email;
+
+                    // C. Send SES Email (if email exists)
+                    if (requesterEmail) {
+                        console.log(`Sending notification to ${requesterEmail}`);
+                        await sesClient.send(new SendEmailCommand({
+                            Source: SENDER_EMAIL, // Must be verified in Sandbox
+                            Destination: { ToAddresses: [requesterEmail] },
+                            Message: {
+                                Subject: { Data: `Task Submitted: ${task.title || taskId}` },
+                                Body: {
+                                    Text: { Data: `A worker has submitted work for your task "${task.title}".\n\nPlease login to the dashboard to review and approve/reject the submission.` }
+                                }
+                            }
+                        }));
+                    } else {
+                        console.log('No requester email found for notification.');
+                    }
+                }
+            }
+            // --------------------------
+
         } catch (updateError) {
-            console.error('Failed to update task status:', updateError);
-            // We succeed with the submission but log the error. 
-            // In a strict financial system we might want to rollback the submission, 
-            // but for this MVP catching it is safer to avoid blocking the user if there's a race condition.
+            console.error('Failed to update task status or notify:', updateError);
+            // Non-critical failure for notification, continue
         }
 
         // 3. Send to SQS for QC

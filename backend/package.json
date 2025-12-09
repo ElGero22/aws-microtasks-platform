@@ -11,10 +11,14 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.947.0",
+    "@aws-sdk/client-ses": "^3.947.0",
+    "@aws-sdk/lib-dynamodb": "^3.947.0",
     "@aws-sdk/s3-request-presigner": "^3.943.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.159",
     "@types/uuid": "^10.0.0"
   }
 }

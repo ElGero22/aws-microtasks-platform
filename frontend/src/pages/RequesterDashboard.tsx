@@ -3,6 +3,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { apiConfig } from '../aws-config';
 import '../styles/dashboard.css';
 import { MetricsCard, BudgetTracker, PerformanceChart, ExportButton } from '../components/DashboardMetrics';
+import { SubmissionReviewModal } from '../components/SubmissionReviewModal';
 
 export function RequesterDashboard() {
     const [formData, setFormData] = useState({
@@ -23,28 +24,105 @@ export function RequesterDashboard() {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [showStats, setShowStats] = useState(true);
 
+    const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+    const [selectedTaskTitle, setSelectedTaskTitle] = useState<string>('');
+
     // Mock stats for demo
-    const [requesterStats] = useState({
-        budget: { total: 500.00, spent: 245.50, pending: 78.25 },
-        tasksPublished: 45,
-        tasksCompleted: 38,
-        avgQuality: 92.5,
-        throughput: 12.4, // tasks per hour
-        weeklyData: [
-            { date: 'Mon', value: 8 },
-            { date: 'Tue', value: 12 },
-            { date: 'Wed', value: 15 },
-            { date: 'Thu', value: 10 },
-            { date: 'Fri', value: 18 },
-            { date: 'Sat', value: 5 },
-            { date: 'Sun', value: 3 },
-        ],
-        recentTasks: [
-            { taskId: 't-001', title: 'Image Classification Batch', status: 'Completed', submissions: 50, approved: 47 },
-            { taskId: 't-002', title: 'Audio Transcription', status: 'In Progress', submissions: 23, approved: 20 },
-            { taskId: 't-003', title: 'Sentiment Analysis', status: 'In Progress', submissions: 15, approved: 12 },
-        ]
+    const [requesterStats, setRequesterStats] = useState({
+        budget: { totalBudget: 0, spent: 0, pending: 0 },
+        tasksPublished: 0,
+        tasksCompleted: 0,
+        avgQuality: 0,
+        throughput: 0,
+        weeklyData: [] as { date: string, value: number }[],
+        recentTasks: [] as any[]
     });
+
+    useEffect(() => {
+        loadStats();
+    }, []);
+
+    const loadStats = async () => {
+        try {
+            const session = await fetchAuthSession();
+            const token = session.tokens?.idToken?.toString();
+
+            const response = await fetch(`${apiConfig.endpoint}tasks/my-published`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': token || '',
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const myTasks = data.tasks || [];
+                calculateStats(myTasks);
+            }
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    };
+
+    const calculateStats = (myTasks: any[]) => {
+        let totalBudget = 0;
+        let spent = 0;
+        let pending = 0;
+        let completed = 0;
+
+        // Weekly data map initialization
+        const weeklyDataMap = new Map<string, number>();
+        const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        days.forEach(d => weeklyDataMap.set(d, 0));
+
+        const now = new Date();
+        const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1))).getTime();
+
+        myTasks.forEach(task => {
+            const reward = parseFloat(task.reward) || 0;
+            totalBudget += reward; // Assuming total budget is sum of all task rewards (commitment)
+
+            if (['PAID', 'COMPLETED', 'APPROVED'].includes(task.status)) {
+                spent += reward;
+                completed++;
+            } else {
+                pending += reward;
+            }
+
+            // Weekly Activity (Tasks Published)
+            const taskDate = new Date(task.createdAt || Date.now());
+            if (taskDate.getTime() >= startOfWeek) {
+                const dayName = taskDate.toLocaleDateString('en-US', { weekday: 'short' });
+                if (weeklyDataMap.has(dayName)) {
+                    weeklyDataMap.set(dayName, (weeklyDataMap.get(dayName) || 0) + 1);
+                }
+            }
+        });
+
+        const weeklyData = days.map(day => ({ date: day, value: weeklyDataMap.get(day) || 0 }));
+
+        // Recent Tasks (Sort by createdAt desc and take top 5)
+        const recentTasks = [...myTasks]
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, 5)
+            .map(t => ({
+                taskId: t.taskId,
+                title: t.title,
+                status: t.status,
+                submissions: 0, // Need separate API for submissions count if not in task object
+                approved: 0
+            }));
+
+        setRequesterStats({
+            budget: { totalBudget, spent, pending },
+            tasksPublished: myTasks.length,
+            tasksCompleted: completed,
+            avgQuality: 0, // Placeholder
+            throughput: 0, // Placeholder
+            weeklyData,
+            recentTasks
+        });
+    };
 
     // Cleanup preview URL to avoid memory leaks
     useEffect(() => {
@@ -181,6 +259,11 @@ export function RequesterDashboard() {
         }
     };
 
+    const openReview = (taskId: string, title: string) => {
+        setSelectedTaskId(taskId);
+        setSelectedTaskTitle(title);
+    };
+
     return (
         <div className="dashboard-container">
             {/* Stats Section */}
@@ -200,7 +283,7 @@ export function RequesterDashboard() {
                             value={requesterStats.tasksCompleted}
                             icon="✅"
                             color="success"
-                            subtitle={`${((requesterStats.tasksCompleted / requesterStats.tasksPublished) * 100).toFixed(0)}% completion`}
+                            subtitle={`${requesterStats.tasksPublished > 0 ? ((requesterStats.tasksCompleted / requesterStats.tasksPublished) * 100).toFixed(0) : 0}% completion`}
                         />
                         <MetricsCard
                             title="Avg Quality"
@@ -237,6 +320,7 @@ export function RequesterDashboard() {
                                     <th>Submissions</th>
                                     <th>Approved</th>
                                     <th>Approval Rate</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -256,7 +340,22 @@ export function RequesterDashboard() {
                                         </td>
                                         <td>{task.submissions}</td>
                                         <td>{task.approved}</td>
-                                        <td style={{ color: '#22c55e' }}>{((task.approved / task.submissions) * 100).toFixed(0)}%</td>
+                                        <td style={{ color: '#22c55e' }}>{task.submissions > 0 ? ((task.approved / task.submissions) * 100).toFixed(0) : 0}%</td>
+                                        <td>
+                                            {
+                                                /* Show Review button for tasks that might have submissions */
+                                                /* Ideally we check submissions count, but we also check status. */
+                                                /* Since we don't have accurate submission count yet, we just show it for all or if status is not available? */
+                                                /* Let's show it always for now so the user can check. */
+                                                <button
+                                                    className="btn-primary"
+                                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', background: '#3b82f6' }}
+                                                    onClick={() => openReview(task.taskId, task.title)}
+                                                >
+                                                    Review
+                                                </button>
+                                            }
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -514,6 +613,14 @@ export function RequesterDashboard() {
                     </div>
                 </div>
             </div>
+
+            {selectedTaskId && (
+                <SubmissionReviewModal
+                    taskId={selectedTaskId}
+                    taskTitle={selectedTaskTitle}
+                    onClose={() => setSelectedTaskId(null)}
+                />
+            )}
         </div>
     );
 }

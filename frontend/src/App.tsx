@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { RequesterApp } from './pages/RequesterApp';
 import { WorkerApp } from './pages/WorkerApp';
 import { RequesterDashboard } from './pages/RequesterDashboard';
@@ -6,9 +6,25 @@ import { RequesterMyTasks } from './pages/RequesterMyTasks';
 import { WorkerDashboard } from './pages/WorkerDashboard';
 import { WorkerMyTasks } from './pages/WorkerMyTasks';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { TaskSubmissions } from './pages/TaskSubmissions';
 import { WorkerDemoPreview } from './pages/WorkerDemoPreview';
+import { AuthPage } from './pages/AuthPage';
+import { RoleSelection } from './pages/RoleSelection';
+import { Authenticator, useAuthenticator } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
 import './styles/dashboard.css';
+
+// Protected Route Wrapper
+function ProtectedRoute({ children }: { children: any }) {
+  const { authStatus } = useAuthenticator((context) => [context.authStatus]);
+  const location = useLocation();
+
+  if (authStatus !== 'authenticated') {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return children;
+}
 
 function Landing() {
   return (
@@ -28,23 +44,13 @@ function Landing() {
       </p>
 
       <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', flexWrap: 'wrap' }}>
-        <Link to="/requester" style={{ textDecoration: 'none' }}>
+        <Link to="/login" style={{ textDecoration: 'none' }}>
           <div className="card" style={{ width: '300px', padding: '3rem 2rem', cursor: 'pointer', transition: 'transform 0.2s' }}
             onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-5px)'}
             onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
-            <h2 style={{ color: 'var(--primary-color)', marginBottom: '1rem' }}>I am a Requester</h2>
-            <p style={{ color: 'var(--text-muted)' }}>Post tasks and manage your projects.</p>
-            <button className="btn-primary" style={{ marginTop: '1.5rem', width: '100%' }}>Get Started</button>
-          </div>
-        </Link>
-
-        <Link to="/worker" style={{ textDecoration: 'none' }}>
-          <div className="card" style={{ width: '300px', padding: '3rem 2rem', cursor: 'pointer', transition: 'transform 0.2s' }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-5px)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
-            <h2 style={{ color: 'var(--secondary-color)', marginBottom: '1rem' }}>I am a Worker</h2>
-            <p style={{ color: 'var(--text-muted)' }}>Browse tasks and earn rewards.</p>
-            <button className="btn-primary" style={{ marginTop: '1.5rem', width: '100%', background: 'linear-gradient(135deg, var(--secondary-color), var(--primary-color))' }}>Start Earning</button>
+            <h2 style={{ color: 'var(--primary-color)', marginBottom: '1rem' }}>Get Started</h2>
+            <p style={{ color: 'var(--text-muted)' }}>Sign in to post tasks or start earning.</p>
+            <button className="btn-primary" style={{ marginTop: '1.5rem', width: '100%' }}>Login / Sign Up</button>
           </div>
         </Link>
       </div>
@@ -61,21 +67,42 @@ function Landing() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/requester" element={<RequesterApp />}>
-          <Route index element={<RequesterDashboard />} />
-          <Route path="my-tasks" element={<RequesterMyTasks />} />
-        </Route>
-        <Route path="/worker" element={<WorkerApp />}>
-          <Route index element={<WorkerDashboard />} />
-          <Route path="my-tasks" element={<WorkerMyTasks />} />
-        </Route>
-        <Route path="/worker/demo" element={<WorkerDemoPreview />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-      </Routes>
-    </BrowserRouter>
+    <Authenticator.Provider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<AuthPage />} />
+
+          <Route path="/select-role" element={
+            <ProtectedRoute>
+              <RoleSelection />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/requester" element={
+            <ProtectedRoute>
+              <RequesterApp />
+            </ProtectedRoute>
+          }>
+            <Route index element={<RequesterDashboard />} />
+            <Route path="my-tasks" element={<RequesterMyTasks />} />
+          </Route>
+
+          <Route path="/worker" element={
+            <ProtectedRoute>
+              <WorkerApp />
+            </ProtectedRoute>
+          }>
+            <Route index element={<WorkerDashboard />} />
+            <Route path="my-tasks" element={<WorkerMyTasks />} />
+          </Route>
+
+          <Route path="/worker/demo" element={<WorkerDemoPreview />} />
+          <Route path="/tasks/:taskId/submissions" element={<TaskSubmissions />} />
+          <Route path="/admin" element={<AdminDashboard />} />
+        </Routes>
+      </BrowserRouter>
+    </Authenticator.Provider>
   );
 }
 

@@ -2,33 +2,29 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Amplify } from 'aws-amplify';
 import { fetchUserAttributes } from 'aws-amplify/auth';
-import { Authenticator, useAuthenticator } from '@aws-amplify/ui-react';
+import { useAuthenticator } from '@aws-amplify/ui-react';
 import { authConfig } from '../aws-config';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
-const formFields = {
-    signUp: {
-        name: {
-            order: 1,
-            label: 'Full Name',
-            placeholder: 'Enter your full name',
-            isRequired: true,
-        },
-        email: {
-            order: 2
-        },
-        password: {
-            order: 3
-        },
-        confirm_password: {
-            order: 4
-        }
-    },
-};
-
-const AuthenticatedRequesterView = () => {
+export function RequesterApp() {
     const { user, signOut } = useAuthenticator((context) => [context.user]);
     const [userName, setUserName] = useState<string>('');
+    const location = useLocation();
+    const navigate = useNavigate();
+    const [isConfigured, setIsConfigured] = useState(false);
+
+    useEffect(() => {
+        const initAuth = async () => {
+            try {
+                Amplify.configure(authConfig);
+                setIsConfigured(true);
+            } catch (error) {
+                console.error('Error configuring Amplify:', error);
+            }
+        };
+
+        initAuth();
+    }, []);
 
     useEffect(() => {
         const loadUserName = async () => {
@@ -40,11 +36,10 @@ const AuthenticatedRequesterView = () => {
                 setUserName(user?.username || '');
             }
         };
-        loadUserName();
+        if (user) loadUserName();
     }, [user]);
 
-    const location = useLocation();
-    const navigate = useNavigate();
+    if (!isConfigured) return <div>Loading...</div>;
 
     return (
         <div style={{ width: '100%' }}>
@@ -77,72 +72,5 @@ const AuthenticatedRequesterView = () => {
 
             <Outlet />
         </div>
-    );
-};
-
-const RequesterAppContent = () => {
-    const { authStatus } = useAuthenticator(context => [context.authStatus]);
-
-    if (authStatus === 'authenticated') {
-        return <AuthenticatedRequesterView />;
-    }
-
-    return (
-        <div className="auth-wrapper">
-            <div className="auth-container">
-                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                    <h1 style={{
-                        fontSize: '2.5rem',
-                        marginBottom: '0.5rem',
-                        background: 'linear-gradient(to right, var(--primary-color), var(--secondary-color))',
-                        backgroundClip: 'text',
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent'
-                    }}>
-                        Requester Portal
-                    </h1>
-                    <p style={{ color: 'var(--text-muted)' }}>Sign in to post tasks and manage projects</p>
-                </div>
-                <Authenticator formFields={formFields} loginMechanisms={['email']} />
-            </div>
-        </div>
-    );
-};
-
-export function RequesterApp() {
-    const [isConfigured, setIsConfigured] = useState(false);
-
-    useEffect(() => {
-        const initAuth = async () => {
-            try {
-                Amplify.configure(authConfig);
-                setIsConfigured(true);
-            } catch (error) {
-                console.error('Error configuring Amplify:', error);
-            }
-        };
-
-        initAuth();
-    }, []);
-
-    if (!isConfigured) {
-        return (
-            <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                height: '100vh',
-                backgroundColor: 'var(--bg-color)',
-                color: 'var(--text-color)'
-            }}>
-                Cargando...
-            </div>
-        );
-    }
-
-    return (
-        <Authenticator.Provider>
-            <RequesterAppContent />
-        </Authenticator.Provider>
     );
 }

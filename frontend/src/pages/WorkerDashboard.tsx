@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { fetchAuthSession, fetchUserAttributes } from 'aws-amplify/auth';
 import { apiConfig } from '../aws-config';
 import '../styles/dashboard.css';
 import { MetricsCard, EarningsBreakdown, Leaderboard, PerformanceChart } from '../components/DashboardMetrics';
@@ -13,20 +13,12 @@ export function WorkerDashboard() {
     const [showStats, setShowStats] = useState(true);
 
     // Mock stats for demo
-    const [workerStats] = useState({
-        earnings: { today: 12.50, week: 87.25, month: 342.00, total: 1245.75 },
-        tasksCompleted: 156,
-        accuracy: 94.2,
-        level: 'Expert',
-        weeklyData: [
-            { date: 'Mon', value: 15 },
-            { date: 'Tue', value: 22 },
-            { date: 'Wed', value: 18 },
-            { date: 'Thu', value: 25 },
-            { date: 'Fri', value: 31 },
-            { date: 'Sat', value: 12 },
-            { date: 'Sun', value: 8 },
-        ],
+    const [workerStats, setWorkerStats] = useState({
+        earnings: { today: 0, week: 0, month: 0, total: 0 },
+        tasksCompleted: 0,
+        accuracy: 100,
+        level: 'Novice',
+        weeklyData: [] as { date: string, value: number }[],
         leaderboard: [
             { rank: 1, name: 'Carlos M.', earnings: 425.50, tasksCompleted: 312, accuracy: 98.5 },
             { rank: 2, name: 'María L.', earnings: 380.25, tasksCompleted: 287, accuracy: 97.2 },
@@ -39,7 +31,132 @@ export function WorkerDashboard() {
 
     useEffect(() => {
         loadTasks();
+        loadStats();
     }, []);
+
+    const loadStats = async () => {
+        try {
+            const session = await fetchAuthSession();
+            const token = session.tokens?.idToken?.toString();
+            const sub = session.tokens?.idToken?.payload?.sub as string;
+
+            // Fetch User Attributes for Name
+            const attributes = await fetchUserAttributes();
+            const realName = attributes.name || attributes.preferred_username || 'You';
+
+            const response = await fetch(`${apiConfig.endpoint}tasks/my-tasks`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': token || '',
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const myTasks = data.tasks || [];
+                calculateStats(myTasks, realName, token, sub);
+            }
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    };
+
+    const calculateStats = async (myTasks: any[], realName: string, token: string | undefined, workerId: string | undefined) => {
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1))).getTime(); // Monday
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+        let total = 0;
+        let today = 0;
+        let week = 0;
+        let month = 0;
+        let completed = 0;
+        let approved = 0;
+        let rejected = 0;
+
+        // Initialize weekly data map (Mon-Sun)
+        const weeklyDataMap = new Map<string, number>();
+        const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        days.forEach(d => weeklyDataMap.set(d, 0));
+
+        myTasks.forEach(task => {
+            const reward = parseFloat(task.reward) || 0;
+            // Assuming createdAt or updatedAt is available. Using createdAt as fallback.
+            const taskDate = new Date(task.updatedAt || task.createdAt || Date.now());
+            const taskTime = taskDate.getTime();
+
+            // Check status for earnings
+            if (['PAID', 'APPROVED', 'COMPLETED'].includes(task.status)) {
+                total += reward;
+                completed++;
+                approved++;
+
+                if (taskTime >= startOfDay) today += reward;
+                if (taskTime >= startOfWeek) week += reward;
+                if (taskTime >= startOfMonth) month += reward;
+            } else if (task.status === 'REJECTED') {
+                rejected++;
+            }
+
+            // Populate weekly activity (tasks done or earnings? Graph says "Tasks This Week" but usually correlates to activity)
+            // Let's count tasks completed per day
+            if (taskTime >= startOfWeek) {
+                const dayName = taskDate.toLocaleDateString('en-US', { weekday: 'short' });
+                if (weeklyDataMap.has(dayName)) {
+                    weeklyDataMap.set(dayName, (weeklyDataMap.get(dayName) || 0) + 1);
+                }
+            }
+        });
+
+        const accuracy = (completed + rejected) > 0 ? (approved / (completed + rejected)) * 100 : 100;
+        const accuracyFormatted = parseFloat(accuracy.toFixed(1));
+
+        let level = 'Novice';
+        if (completed > 50) level = 'Intermediate';
+        if (completed > 150) level = 'Expert';
+
+        const weeklyData = days.map(day => ({ date: day, value: weeklyDataMap.get(day) || 0 }));
+
+        // Fetch Real Leaderboard
+        let updatedLeaderboard: any[] = [];
+        try {
+            if (token) {
+                const lbResponse = await fetch(`${apiConfig.endpoint}leaderboard`, {
+                    headers: { 'Authorization': token }
+                });
+                if (lbResponse.ok) {
+                    const lbData = await lbResponse.json();
+                    updatedLeaderboard = lbData.leaderboard.map((entry: any) => {
+                        const isMe = entry.workerId === workerId;
+                        return {
+                            ...entry,
+                            name: isMe ? `${realName} (You)` : entry.name,
+                            isCurrentUser: isMe
+                        };
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching leaderboard:', e);
+        }
+
+        setWorkerStats(prev => ({
+            ...prev,
+            earnings: { today, week, month, total },
+            tasksCompleted: completed,
+            accuracy: accuracyFormatted,
+            level,
+            weeklyData,
+            leaderboard: updatedLeaderboard.length > 0 ? updatedLeaderboard : (prev.leaderboard.some((e: any) => e.name === 'Carlos M.') && updatedLeaderboard.length === 0 ? [] : prev.leaderboard)
+        }));
+
+        if (updatedLeaderboard.length > 0) {
+            setWorkerStats(prev => ({ ...prev, leaderboard: updatedLeaderboard }));
+        } else if (updatedLeaderboard.length === 0) {
+            setWorkerStats(prev => ({ ...prev, leaderboard: [] }));
+        }
+    };
 
     const loadTasks = async () => {
         setLoading(true);
@@ -92,6 +209,7 @@ export function WorkerDashboard() {
             if (response.ok) {
                 setSubmissionMessage(`Work submitted for task!`);
                 setTimeout(() => setSubmissionMessage(''), 3000);
+                loadStats(); // Refresh stats after submission
             } else {
                 setSubmissionMessage('Failed to submit work.');
             }
@@ -161,7 +279,7 @@ export function WorkerDashboard() {
                             value={`$${workerStats.earnings.today.toFixed(2)}`}
                             icon="💰"
                             color="success"
-                            trend={{ value: 15, isPositive: true }}
+                            trend={{ value: 0, isPositive: true }} // Trend calculation requires more historical data
                         />
                         <MetricsCard
                             title="Tasks Completed"

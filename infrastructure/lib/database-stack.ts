@@ -10,6 +10,7 @@ export class DatabaseStack extends cdk.Stack {
     public readonly transactionsTable: dynamodb.Table;
     public readonly assignmentsTable: dynamodb.Table;
     public readonly workersTable: dynamodb.Table;
+    public readonly requestersTable: dynamodb.Table;
 
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
@@ -130,6 +131,13 @@ export class DatabaseStack extends cdk.Stack {
             indexName: 'byLevel',
             partitionKey: { name: 'level', type: dynamodb.AttributeType.STRING },
             sortKey: { name: 'accuracy', type: dynamodb.AttributeType.NUMBER },
+        });
+
+        // Requesters Table (requester profiles)
+        this.requestersTable = new dynamodb.Table(this, 'RequestersTable', {
+            partitionKey: { name: 'requesterId', type: dynamodb.AttributeType.STRING },
+            billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+            removalPolicy: cdk.RemovalPolicy.DESTROY,
         });
     }
 }

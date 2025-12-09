@@ -3,7 +3,6 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { apiConfig } from '../aws-config';
 import '../styles/dashboard.css';
 import { TaskMedia } from '../components/TaskMedia';
-import { BoundingBoxEditor } from '../components/BoundingBoxEditor';
 import type { BoundingBox } from '../components/BoundingBoxEditor';
 
 export function WorkerMyTasks() {
@@ -133,6 +132,37 @@ export function WorkerMyTasks() {
             console.error(error);
             setMessage('Error de red al enviar el trabajo.');
         }
+    }
+
+
+    const handleDecline = async (taskId: string) => {
+        if (!window.confirm('¿Estás seguro de que quieres rechazar esta tarea? Esto afectará negativamente tu reputación.')) {
+            return;
+        }
+
+        try {
+            const session = await fetchAuthSession();
+            const token = session.tokens?.idToken?.toString();
+
+            setMessage('Rechazando tarea...');
+            const response = await fetch(`${apiConfig.endpoint}tasks/${taskId}/decline`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': token || '',
+                },
+            });
+
+            if (response.ok) {
+                setMessage('Tarea rechazada.');
+                setTimeout(() => setMessage(''), 3000);
+                loadMyTasks();
+            } else {
+                setMessage('Error al rechazar la tarea.');
+            }
+        } catch (error) {
+            console.error(error);
+            setMessage('Error de red al rechazar la tarea.');
+        }
     };
 
     const activeTasks = tasks.filter(task => task.status === 'ASSIGNED');
@@ -189,17 +219,15 @@ export function WorkerMyTasks() {
                     <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.5rem' }}>
                         <h5 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Entregar Trabajo</h5>
 
-                        {/* Bounding Box Editor for image tasks */}
+                        {/* Bounding Box Editor TEMPORARILY DISABLED */}
                         {task.mediaUrl && task.mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)/i) && (
-                            <div style={{ marginBottom: '1rem' }}>
+                            <div style={{ marginBottom: '1rem', padding: '1rem', border: '1px dashed #6366f1', borderRadius: '0.5rem', background: 'rgba(99, 102, 241, 0.1)' }}>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-color)', fontWeight: 600 }}>
                                     📦 Marca las áreas relevantes en la imagen:
                                 </label>
-                                <BoundingBoxEditor
-                                    imageUrl={task.mediaUrl}
-                                    boxes={boundingBoxes}
-                                    onChange={setBoundingBoxes}
-                                />
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                    Editor de anotaciones deshabilitado temporalmente.
+                                </div>
                             </div>
                         )}
 
@@ -266,23 +294,33 @@ export function WorkerMyTasks() {
                         </div>
                     </div>
                 ) : (
-                    <button
-                        className="btn-primary"
-                        style={{ width: '100%' }}
-                        onClick={() => {
-                            setSubmittingId(task.taskId);
-                            setSelectedFile(null);
-                        }}
-                    >
-                        Entregar Trabajo
-                    </button>
+                    <div>
+                        <button
+                            className="btn-primary"
+                            style={{ width: '100%' }}
+                            onClick={() => {
+                                setSubmittingId(task.taskId);
+                                setSelectedFile(null);
+                            }}
+                        >
+                            Entregar Trabajo
+                        </button>
+                        <button
+                            className="btn-secondary"
+                            style={{ width: '100%', marginTop: '0.5rem', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
+                            onClick={() => handleDecline(task.taskId)}
+                        >
+                            Rechazar Tarea
+                        </button>
+                    </div>
                 )
+
             ) : (
                 <div style={{ padding: '0.5rem', textAlign: 'center', background: 'rgba(255,255,255,0.03)', borderRadius: '0.5rem' }}>
                     <small>Tarea completada</small>
                 </div>
             )}
-        </div>
+        </div >
     );
 
     if (loading) return (
