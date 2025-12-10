@@ -1,13 +1,26 @@
 import { APIGatewayProxyHandler } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { CORS_HEADERS } from '../shared/cors';
+import { SubmissionService } from '../shared/submission-service';
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
 
+// Environment variables
 const SUBMISSIONS_TABLE = process.env.SUBMISSIONS_TABLE!;
 const TASKS_TABLE = process.env.TASKS_TABLE!;
+const WALLET_TABLE = process.env.WALLET_TABLE!;
+const TRANSACTIONS_TABLE = process.env.TRANSACTIONS_TABLE!;
+const WORKERS_TABLE = process.env.WORKERS_TABLE!;
+
+const submissionService = new SubmissionService(docClient, {
+    SUBMISSIONS_TABLE,
+    TASKS_TABLE,
+    WALLET_TABLE,
+    TRANSACTIONS_TABLE,
+    WORKERS_TABLE
+});
 
 export const handler: APIGatewayProxyHandler = async (event) => {
     console.log('Event:', JSON.stringify(event));
@@ -34,83 +47,33 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             };
         }
 
-        // 1. Get Submission to find taskId
-        const subResult = await docClient.send(new GetCommand({
-            TableName: SUBMISSIONS_TABLE,
-            Key: { submissionId }
-        }));
-
-        if (!subResult.Item) {
-            return {
-                statusCode: 404,
-                headers: CORS_HEADERS,
-                body: JSON.stringify({ message: 'Submission not found' }),
-            };
-        }
-
-        const taskId = subResult.Item.taskId;
-
-        // 2. Verify Task Ownership
-        const taskResult = await docClient.send(new GetCommand({
-            TableName: TASKS_TABLE,
-            Key: { taskId }
-        }));
-
-        if (!taskResult.Item || taskResult.Item.requesterId !== requesterId) {
-            return {
-                statusCode: 403,
-                headers: CORS_HEADERS,
-                body: JSON.stringify({ message: 'Unauthorized' }),
-            };
-        }
-
-        // 3. Update Submission Status
-        const newStatus = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
-
-        await docClient.send(new UpdateCommand({
-            TableName: SUBMISSIONS_TABLE,
-            Key: { submissionId },
-            UpdateExpression: 'set #status = :status, feedback = :feedback, reviewedAt = :reviewedAt',
-            ExpressionAttributeNames: {
-                '#status': 'status'
-            },
-            ExpressionAttributeValues: {
-                ':status': newStatus,
-                ':feedback': reason || '',
-                ':reviewedAt': new Date().toISOString()
-            }
-        }));
-
-        if (decision === 'APPROVE') {
-            await docClient.send(new UpdateCommand({
-                TableName: TASKS_TABLE,
-                Key: { taskId },
-                UpdateExpression: 'set #status = :status',
-                ExpressionAttributeNames: { '#status': 'status' },
-                ExpressionAttributeValues: { ':status': 'COMPLETED' }
-            }));
-        } else if (decision === 'REJECT') {
-            await docClient.send(new UpdateCommand({
-                TableName: TASKS_TABLE,
-                Key: { taskId },
-                UpdateExpression: 'set #status = :status, assignedTo = :empty',
-                ExpressionAttributeNames: { '#status': 'status' },
-                ExpressionAttributeValues: { ':status': 'AVAILABLE', ':empty': null }
-            }));
-        }
+        const result = await submissionService.reviewSubmission({
+            submissionId,
+            decision,
+            reason,
+            requesterId
+        });
 
         return {
             statusCode: 200,
             headers: CORS_HEADERS,
-            body: JSON.stringify({ message: `Submission ${newStatus}`, submissionId }),
+            body: JSON.stringify({ message: `Submission ${result.status}`, submissionId }),
         };
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error reviewing submission:', error);
+
+        let statusCode = 500;
+        if (error.message === 'Submission not found' || error.message === 'Task not found') {
+            statusCode = 404;
+        } else if (error.message === 'Unauthorized') {
+            statusCode = 403;
+        }
+
         return {
-            statusCode: 500,
+            statusCode,
             headers: CORS_HEADERS,
-            body: JSON.stringify({ message: 'Internal Server Error' }),
+            body: JSON.stringify({ message: error.message || 'Internal Server Error' }),
         };
     }
 };

@@ -86,7 +86,7 @@ export function BudgetTracker({ totalBudget, spent, pending }: BudgetTrackerProp
     return (
         <div className="card" style={{ padding: '1.5rem', borderRadius: '1rem' }}>
             <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-color)', fontSize: '1.1rem' }}>
-                💰 Budget Tracking
+                💰 Seguimiento de Presupuesto
             </h4>
 
             {/* Progress bar */}
@@ -117,15 +117,15 @@ export function BudgetTracker({ totalBudget, spent, pending }: BudgetTrackerProp
             {/* Legend */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', fontSize: '0.85rem' }}>
                 <div>
-                    <div style={{ color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Spent</div>
+                    <div style={{ color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Gastado</div>
                     <div style={{ color: '#22c55e', fontWeight: 600 }}>${spent.toFixed(2)}</div>
                 </div>
                 <div>
-                    <div style={{ color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Pending</div>
+                    <div style={{ color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Pendiente</div>
                     <div style={{ color: '#f59e0b', fontWeight: 600 }}>${pending.toFixed(2)}</div>
                 </div>
                 <div>
-                    <div style={{ color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Available</div>
+                    <div style={{ color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Disponible</div>
                     <div style={{ color: 'var(--primary-color)', fontWeight: 600 }}>${available.toFixed(2)}</div>
                 </div>
             </div>
@@ -144,7 +144,7 @@ export function EarningsBreakdown({ today, week, month, total }: EarningsBreakdo
     return (
         <div className="card" style={{ padding: '1.5rem', borderRadius: '1rem' }}>
             <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-color)', fontSize: '1.1rem' }}>
-                📊 Earnings Breakdown
+                📊 Desglose de Ganancias
             </h4>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -154,7 +154,7 @@ export function EarningsBreakdown({ today, week, month, total }: EarningsBreakdo
                     borderRadius: '0.75rem',
                     border: '1px solid rgba(34, 197, 94, 0.2)'
                 }}>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>TODAY</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>HOY</div>
                     <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#22c55e' }}>${today.toFixed(2)}</div>
                 </div>
 
@@ -164,7 +164,7 @@ export function EarningsBreakdown({ today, week, month, total }: EarningsBreakdo
                     borderRadius: '0.75rem',
                     border: '1px solid rgba(99, 102, 241, 0.2)'
                 }}>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>THIS WEEK</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>ESTA SEMANA</div>
                     <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--primary-color)' }}>${week.toFixed(2)}</div>
                 </div>
 
@@ -174,7 +174,7 @@ export function EarningsBreakdown({ today, week, month, total }: EarningsBreakdo
                     borderRadius: '0.75rem',
                     border: '1px solid rgba(244, 114, 182, 0.2)'
                 }}>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>THIS MONTH</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>ESTE MES</div>
                     <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#f472b6' }}>${month.toFixed(2)}</div>
                 </div>
 
@@ -184,7 +184,7 @@ export function EarningsBreakdown({ today, week, month, total }: EarningsBreakdo
                     borderRadius: '0.75rem',
                     border: '1px solid rgba(255, 255, 255, 0.1)'
                 }}>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>ALL TIME</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>TOTAL HISTÓRICO</div>
                     <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-color)' }}>${total.toFixed(2)}</div>
                 </div>
             </div>
@@ -218,7 +218,7 @@ export function Leaderboard({ entries }: LeaderboardProps) {
     return (
         <div className="card" style={{ padding: '1.5rem', borderRadius: '1rem' }}>
             <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-color)', fontSize: '1.1rem' }}>
-                🏆 Top Workers This Week
+                🏆 Top Trabajadores (Semanal)
             </h4>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -242,10 +242,10 @@ export function Leaderboard({ entries }: LeaderboardProps) {
                         <div>
                             <div style={{ fontWeight: 500, color: 'var(--text-color)' }}>
                                 {entry.name}
-                                {entry.isCurrentUser && <span style={{ color: 'var(--primary-color)', marginLeft: '0.5rem', fontSize: '0.75rem' }}>(You)</span>}
+                                {entry.isCurrentUser && <span style={{ color: 'var(--primary-color)', marginLeft: '0.5rem', fontSize: '0.75rem' }}>(Tú)</span>}
                             </div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                {entry.tasksCompleted} tasks • {entry.accuracy}% accuracy
+                                {entry.tasksCompleted} tareas • {entry.accuracy}% precisión
                             </div>
                         </div>
                         <span style={{ color: '#22c55e', fontWeight: 600, textAlign: 'right' }}>

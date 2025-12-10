@@ -93,6 +93,23 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     }));
                     const requesterEmail = reqResult.Item?.email;
 
+                    // Get Worker Name
+                    let workerName = 'Unknown Worker';
+                    if (process.env.WORKERS_TABLE) {
+                        try {
+                            const workerResult = await docClient.send(new GetCommand({
+                                TableName: process.env.WORKERS_TABLE,
+                                Key: { workerId }
+                            }));
+                            if (workerResult.Item && workerResult.Item.name) {
+                                workerName = workerResult.Item.name;
+                            }
+                        } catch (e) {
+                            console.log('Error fetching worker name', e);
+                        }
+                    }
+
+
                     // C. Send SES Email (if email exists)
                     if (requesterEmail) {
                         console.log(`Sending notification to ${requesterEmail}`);
@@ -100,9 +117,9 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                             Source: SENDER_EMAIL, // Must be verified in Sandbox
                             Destination: { ToAddresses: [requesterEmail] },
                             Message: {
-                                Subject: { Data: `Task Submitted: ${task.title || taskId}` },
+                                Subject: { Data: `Nueva entrega para tu tarea: ${task.title}` },
                                 Body: {
-                                    Text: { Data: `A worker has submitted work for your task "${task.title}".\n\nPlease login to the dashboard to review and approve/reject the submission.` }
+                                    Text: { Data: `El trabajador "${workerName}" (ID: ${workerId.substring(0, 8)}) ha enviado una entrega para tu tarea "${task.title}".\n\nDetalles de la entrega:\n${body.content || 'Sin contenido de texto (posiblemente archivo adjunto)'}\n\nPor favor inicia sesión en tu panel para revisar, aprobar o declinar esta entrega.\n\nhttps://d34wzbmshv26k4.cloudfront.net/requester/my-tasks` }
                                 }
                             }
                         }));
@@ -118,11 +135,13 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             // Non-critical failure for notification, continue
         }
 
-        // 3. Send to SQS for QC
+        // 3. Send to SQS for QC (DISABLED to prevent auto-approval)
+        /*
         await sqsClient.send(new SendMessageCommand({
             QueueUrl: SUBMISSION_QUEUE_URL,
             MessageBody: JSON.stringify({ submissionId }),
         }));
+        */
 
         return {
             statusCode: 201,

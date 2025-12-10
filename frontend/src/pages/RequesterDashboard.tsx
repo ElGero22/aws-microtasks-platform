@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { apiConfig } from '../aws-config';
 import '../styles/dashboard.css';
-import { MetricsCard, BudgetTracker, PerformanceChart, ExportButton } from '../components/DashboardMetrics';
-import { SubmissionReviewModal } from '../components/SubmissionReviewModal';
+import { MetricsCard, BudgetTracker, PerformanceChart } from '../components/DashboardMetrics';
+
 
 export function RequesterDashboard() {
     const [formData, setFormData] = useState({
@@ -24,8 +24,7 @@ export function RequesterDashboard() {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [showStats, setShowStats] = useState(true);
 
-    const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-    const [selectedTaskTitle, setSelectedTaskTitle] = useState<string>('');
+
 
     // Mock stats for demo
     const [requesterStats, setRequesterStats] = useState({
@@ -259,10 +258,7 @@ export function RequesterDashboard() {
         }
     };
 
-    const openReview = (taskId: string, title: string) => {
-        setSelectedTaskId(taskId);
-        setSelectedTaskTitle(title);
-    };
+
 
     return (
         <div className="dashboard-container">
@@ -306,61 +302,7 @@ export function RequesterDashboard() {
                         <PerformanceChart data={requesterStats.weeklyData} title="Tasks Completed This Week" color="var(--primary-color)" />
                     </div>
 
-                    {/* Recent Tasks with Export */}
-                    <div className="card" style={{ padding: '1.5rem', borderRadius: '1rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                            <h4 style={{ margin: 0, color: 'var(--text-color)' }}>📋 Recent Tasks</h4>
-                            <ExportButton data={requesterStats.recentTasks} filename="tasks-export" label="Export" />
-                        </div>
-                        <table style={{ width: '100%', fontSize: '0.9rem' }}>
-                            <thead>
-                                <tr style={{ color: 'var(--text-muted)', textAlign: 'left' }}>
-                                    <th style={{ padding: '0.5rem 0' }}>Task</th>
-                                    <th>Status</th>
-                                    <th>Submissions</th>
-                                    <th>Approved</th>
-                                    <th>Approval Rate</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {requesterStats.recentTasks.map(task => (
-                                    <tr key={task.taskId} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <td style={{ padding: '0.75rem 0' }}>{task.title}</td>
-                                        <td>
-                                            <span style={{
-                                                padding: '0.25rem 0.5rem',
-                                                borderRadius: '999px',
-                                                fontSize: '0.75rem',
-                                                background: task.status === 'Completed' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(99, 102, 241, 0.2)',
-                                                color: task.status === 'Completed' ? '#22c55e' : 'var(--primary-color)'
-                                            }}>
-                                                {task.status}
-                                            </span>
-                                        </td>
-                                        <td>{task.submissions}</td>
-                                        <td>{task.approved}</td>
-                                        <td style={{ color: '#22c55e' }}>{task.submissions > 0 ? ((task.approved / task.submissions) * 100).toFixed(0) : 0}%</td>
-                                        <td>
-                                            {
-                                                /* Show Review button for tasks that might have submissions */
-                                                /* Ideally we check submissions count, but we also check status. */
-                                                /* Since we don't have accurate submission count yet, we just show it for all or if status is not available? */
-                                                /* Let's show it always for now so the user can check. */
-                                                <button
-                                                    className="btn-primary"
-                                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', background: '#3b82f6' }}
-                                                    onClick={() => openReview(task.taskId, task.title)}
-                                                >
-                                                    Review
-                                                </button>
-                                            }
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+
 
                     <button
                         onClick={() => setShowStats(false)}
@@ -614,13 +556,7 @@ export function RequesterDashboard() {
                 </div>
             </div>
 
-            {selectedTaskId && (
-                <SubmissionReviewModal
-                    taskId={selectedTaskId}
-                    taskTitle={selectedTaskTitle}
-                    onClose={() => setSelectedTaskId(null)}
-                />
-            )}
+
         </div>
     );
 }

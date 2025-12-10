@@ -11,6 +11,8 @@ export function WorkerDashboard() {
     const [submissionMessage, setSubmissionMessage] = useState('');
     const [submittingId, setSubmittingId] = useState<string | null>(null);
     const [showStats, setShowStats] = useState(true);
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
 
     // Mock stats for demo
     const [workerStats, setWorkerStats] = useState({
@@ -186,9 +188,54 @@ export function WorkerDashboard() {
         }
     };
 
+
+
+    const uploadMedia = async (file: File) => {
+        try {
+            const session = await fetchAuthSession();
+            const token = session.tokens?.idToken?.toString();
+
+            // 1. Get Pre-signed URL
+            const initResponse = await fetch(`${apiConfig.endpoint}media/upload`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token || '',
+                },
+                body: JSON.stringify({
+                    fileName: file.name,
+                    fileType: file.type,
+                    fileSize: file.size
+                }),
+            });
+
+            if (!initResponse.ok) throw new Error('Failed to init upload');
+            const { uploadUrl, publicUrl } = await initResponse.json();
+
+            // 2. Upload to S3
+            await fetch(uploadUrl, {
+                method: 'PUT',
+                body: file,
+                headers: { 'Content-Type': file.type }
+            });
+
+            return publicUrl;
+        } catch (error) {
+            console.error('Upload failed:', error);
+            throw error;
+        }
+    };
+
     const handleSubmitWork = async (taskId: string, content: string) => {
         setSubmittingId(taskId);
+        setIsUploading(true);
         try {
+            let mediaUrl = '';
+            if (selectedFile) {
+                setSubmissionMessage('Subiendo archivo...');
+                mediaUrl = await uploadMedia(selectedFile);
+            }
+
             const session = await fetchAuthSession();
             const token = session.tokens?.idToken?.toString();
             const workerId = session.userSub;
@@ -203,21 +250,25 @@ export function WorkerDashboard() {
                     taskId,
                     workerId,
                     content: content || 'No text content provided',
+                    mediaUrl
                 }),
             });
 
             if (response.ok) {
-                setSubmissionMessage(`Work submitted for task!`);
+                setSubmissionMessage(`¡Tarea enviada con éxito!`);
                 setTimeout(() => setSubmissionMessage(''), 3000);
                 loadStats(); // Refresh stats after submission
+                setSubmittingId(null); // Close form
+                setSelectedFile(null);
             } else {
-                setSubmissionMessage('Failed to submit work.');
+                setSubmissionMessage('Error al enviar la tarea.');
             }
         } catch (error) {
             console.error(error);
-            setSubmissionMessage('Error submitting work.');
+            setSubmissionMessage('Error al enviar la tarea.');
         } finally {
-            setSubmittingId(null);
+            setIsUploading(false);
+            // setSubmittingId(null); // Keep open if error? No, close on success.
         }
     };
 
@@ -275,28 +326,28 @@ export function WorkerDashboard() {
                     {/* Quick Stats Row */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
                         <MetricsCard
-                            title="Today's Earnings"
+                            title="Ganancias de Hoy"
                             value={`$${workerStats.earnings.today.toFixed(2)}`}
                             icon="💰"
                             color="success"
                             trend={{ value: 0, isPositive: true }} // Trend calculation requires more historical data
                         />
                         <MetricsCard
-                            title="Tasks Completed"
+                            title="Tareas Completadas"
                             value={workerStats.tasksCompleted}
                             icon="✅"
                             color="primary"
-                            subtitle="All time"
+                            subtitle="Total histórico"
                         />
                         <MetricsCard
-                            title="Accuracy Rate"
+                            title="Tasa de Precisión"
                             value={`${workerStats.accuracy}%`}
                             icon="🎯"
                             color="secondary"
                         />
                         <MetricsCard
-                            title="Worker Level"
-                            value={workerStats.level}
+                            title="Nivel de Worker"
+                            value={workerStats.level === 'Novice' ? 'Novato' : workerStats.level === 'Intermediate' ? 'Intermedio' : 'Experto'}
                             icon="⭐"
                             color="warning"
                         />
@@ -305,7 +356,7 @@ export function WorkerDashboard() {
                     {/* Detailed Stats Row */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
                         <EarningsBreakdown {...workerStats.earnings} />
-                        <PerformanceChart data={workerStats.weeklyData} title="Tasks This Week" color="#22c55e" />
+                        <PerformanceChart data={workerStats.weeklyData} title="Tareas de la Semana" color="#22c55e" />
                         <Leaderboard entries={workerStats.leaderboard} />
                     </div>
 
@@ -320,7 +371,7 @@ export function WorkerDashboard() {
                             fontSize: '0.8rem'
                         }}
                     >
-                        ▲ Hide Stats
+                        ▲ Ocultar Estadísticas
                     </button>
                 </div>
             )}
@@ -337,7 +388,7 @@ export function WorkerDashboard() {
                         fontSize: '0.8rem'
                     }}
                 >
-                    ▼ Show Stats
+                    ▼ Mostrar Estadísticas
                 </button>
             )}
 
@@ -364,7 +415,7 @@ export function WorkerDashboard() {
                                 </span>
                                 <h4 style={{ margin: '0.5rem 0', fontSize: '1.1rem' }}>{task.title}</h4>
                                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                                    Posted by <span style={{ color: 'var(--text-color)' }}>{task.requesterName || 'Unknown'}</span>
+                                    Publicado por <span style={{ color: 'var(--text-color)' }}>{task.requesterName || 'Desconocido'}</span>
                                 </div>
                             </div>
                             <span className="task-reward">${task.reward}</span>
@@ -403,22 +454,31 @@ export function WorkerDashboard() {
                                     <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                         Subir Archivo (Opcional)
                                     </label>
-                                    <input type="file" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }} />
+                                    <input
+                                        type="file"
+                                        onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                                        style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}
+                                    />
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                                     <button
                                         className="btn-primary"
+                                        disabled={isUploading}
                                         onClick={() => {
                                             const textInput = document.getElementById(`submission-text-${task.taskId}`) as HTMLTextAreaElement;
                                             handleSubmitWork(task.taskId, textInput.value);
                                         }}
                                         style={{ flex: 1 }}
                                     >
-                                        Enviar
+                                        {isUploading ? 'Enviando...' : 'Enviar'}
                                     </button>
                                     <button
                                         className="btn-secondary"
-                                        onClick={() => setSubmittingId(null)}
+                                        disabled={isUploading}
+                                        onClick={() => {
+                                            setSubmittingId(null);
+                                            setSelectedFile(null);
+                                        }}
                                         style={{ padding: '0.5rem 1rem' }}
                                     >
                                         Cancelar

@@ -31,6 +31,9 @@ const apiStack = new ApiStack(app, 'ApiStack', {
   mediaBucket: storageStack.mediaBucket,
   workersTable: databaseStack.workersTable,
   requestersTable: databaseStack.requestersTable,
+  walletTable: databaseStack.walletTable,
+  transactionsTable: databaseStack.transactionsTable,
+  disputesTable: databaseStack.disputesTable,
 });
 
 // Python Lambda Stack for advanced handlers (including AI services)

@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { apiConfig } from '../aws-config';
 
+import { TaskMedia } from './TaskMedia';
+
 interface Submission {
     submissionId: string;
     taskId: string;
     workerId: string;
     content: string; // Text content or JSON
+    mediaUrl?: string;
     status: 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'PENDING_QC';
     submittedAt: string;
 }
@@ -21,6 +24,7 @@ export function SubmissionReviewModal({ taskId, taskTitle, onClose }: Submission
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState<string | null>(null); // submissionId being processed
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     useEffect(() => {
         loadSubmissions();
@@ -77,6 +81,7 @@ export function SubmissionReviewModal({ taskId, taskTitle, onClose }: Submission
             alert('Error reviewing submission');
         } finally {
             setProcessing(null);
+            setEditingId(null);
         }
     };
 
@@ -108,12 +113,20 @@ export function SubmissionReviewModal({ taskId, taskTitle, onClose }: Submission
                                     <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.5rem' }}>
                                         From: Worker {sub.workerId.substring(0, 8)} • {new Date(sub.submittedAt).toLocaleDateString()}
                                     </div>
+
+                                    {/* Display Attached Media */}
+                                    {sub.mediaUrl && (
+                                        <div style={{ marginBottom: '1rem', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                                            <TaskMedia mediaUrl={sub.mediaUrl} />
+                                        </div>
+                                    )}
+
                                     <div style={{ background: '#0f172a', padding: '1rem', borderRadius: '0.5rem', fontFamily: 'monospace' }}>
                                         {sub.content}
                                     </div>
                                 </div>
 
-                                {['SUBMITTED', 'PENDING_QC'].includes(sub.status) ? (
+                                {(['SUBMITTED', 'PENDING_QC'].includes(sub.status) || editingId === sub.submissionId) ? (
                                     <div style={{ display: 'flex', gap: '1rem' }}>
                                         <button
                                             onClick={() => handleReview(sub.submissionId, 'APPROVE')}
@@ -133,12 +146,28 @@ export function SubmissionReviewModal({ taskId, taskTitle, onClose }: Submission
                                         </button>
                                     </div>
                                 ) : (
-                                    <span style={{
-                                        color: sub.status === 'APPROVED' ? '#22c55e' : '#ef4444',
-                                        fontWeight: 'bold'
-                                    }}>
-                                        {sub.status}
-                                    </span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                        <span style={{
+                                            color: sub.status === 'APPROVED' ? '#22c55e' : '#ef4444',
+                                            fontWeight: 'bold'
+                                        }}>
+                                            {sub.status}
+                                        </span>
+                                        <button
+                                            style={{
+                                                background: 'transparent',
+                                                border: '1px solid #475569',
+                                                color: '#cbd5e1',
+                                                padding: '0.25rem 0.5rem',
+                                                borderRadius: '0.25rem',
+                                                cursor: 'pointer',
+                                                fontSize: '0.75rem'
+                                            }}
+                                            onClick={() => setEditingId(sub.submissionId)}
+                                        >
+                                            ✏️ Edit Decision
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         ))}

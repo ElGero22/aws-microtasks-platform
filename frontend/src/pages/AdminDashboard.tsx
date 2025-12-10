@@ -40,38 +40,22 @@ export function AdminDashboard() {
     const loadDisputes = async () => {
         setLoading(true);
         try {
-            // In production, this would call the API
-            // For demo, using mock data
-            const mockDisputes: Dispute[] = [
-                {
-                    disputeId: 'd-001',
-                    submissionId: 's-123',
-                    workerId: 'worker-456',
-                    taskId: 't-789',
-                    reason: 'Mi respuesta fue correcta pero fue rechazada por el sistema de consenso.',
-                    status: 'Open',
-                    createdAt: new Date(Date.now() - 3600000).toISOString()
-                },
-                {
-                    disputeId: 'd-002',
-                    submissionId: 's-124',
-                    workerId: 'worker-457',
-                    taskId: 't-790',
-                    reason: 'Error en la validación AI, la imagen fue clasificada incorrectamente.',
-                    status: 'Open',
-                    createdAt: new Date(Date.now() - 7200000).toISOString()
-                },
-                {
-                    disputeId: 'd-003',
-                    submissionId: 's-125',
-                    workerId: 'worker-458',
-                    taskId: 't-791',
-                    reason: 'Hubo un problema técnico durante el envío.',
-                    status: 'Open',
-                    createdAt: new Date(Date.now() - 86400000).toISOString()
+            const session = await fetchAuthSession();
+            const token = session.tokens?.idToken?.toString();
+
+            const response = await fetch(`${apiConfig.endpoint}disputes`, {
+                headers: {
+                    'Authorization': token || '',
                 }
-            ];
-            setDisputes(mockDisputes);
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setDisputes(data.disputes || []);
+            } else {
+                console.error('Failed to fetch disputes');
+                setMessage('Error loading disputes');
+            }
         } catch (error) {
             console.error('Error loading disputes:', error);
             setMessage('Error loading disputes');
@@ -104,15 +88,14 @@ export function AdminDashboard() {
                 setDisputes(prev => prev.filter(d => d.disputeId !== disputeId));
                 setSelectedDispute(null);
                 setAdminNotes('');
+                loadDisputes();
             } else {
-                setMessage('Error resolving dispute');
+                const err = await response.json();
+                setMessage(`Error resolving dispute: ${err.message}`);
             }
         } catch (error) {
-            // For demo, just update locally
-            setMessage(`Dispute ${decision.toLowerCase()}d successfully! (Demo mode)`);
-            setDisputes(prev => prev.filter(d => d.disputeId !== disputeId));
-            setSelectedDispute(null);
-            setAdminNotes('');
+            console.error(error);
+            setMessage(`Error resolving dispute`);
         } finally {
             setResolving(false);
             setTimeout(() => setMessage(''), 3000);

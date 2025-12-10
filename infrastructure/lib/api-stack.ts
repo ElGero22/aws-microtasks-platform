@@ -19,6 +19,9 @@ interface ApiStackProps extends cdk.StackProps {
     mediaBucket: s3.Bucket;
     workersTable: dynamodb.Table;
     requestersTable: dynamodb.Table;
+    walletTable: dynamodb.Table;
+    transactionsTable: dynamodb.Table;
+    disputesTable: dynamodb.Table;
     // Optional: Python lambdas from PythonLambdaStack
     depositFundsLambda?: lambda.Function;
     withdrawFundsLambda?: lambda.Function;
@@ -143,12 +146,14 @@ export class ApiStack extends cdk.Stack {
                 SUBMISSIONS_TABLE: props.submissionsTable.tableName,
                 TASKS_TABLE: props.tasksTable.tableName,
                 REQUESTERS_TABLE: props.requestersTable.tableName,
+                WORKERS_TABLE: props.workersTable.tableName,
                 SUBMISSION_QUEUE_URL: props.submissionQueue.queueUrl,
             },
         });
         props.submissionsTable.grantWriteData(submitWorkLambda);
         props.tasksTable.grantReadWriteData(submitWorkLambda);
         props.requestersTable.grantReadData(submitWorkLambda);
+        props.workersTable.grantReadData(submitWorkLambda);
         props.submissionQueue.grantSendMessages(submitWorkLambda);
 
         // Grant SES Permissions
@@ -185,12 +190,16 @@ export class ApiStack extends cdk.Stack {
             environment: {
                 SUBMISSIONS_TABLE: props.submissionsTable.tableName,
                 TASKS_TABLE: props.tasksTable.tableName,
+                WALLET_TABLE: props.walletTable.tableName,
+                TRANSACTIONS_TABLE: props.transactionsTable.tableName,
+                WORKERS_TABLE: props.workersTable.tableName,
             },
         });
         props.submissionsTable.grantReadWriteData(reviewSubmissionLambda);
-        props.tasksTable.grantReadData(reviewSubmissionLambda);
-
-
+        props.tasksTable.grantReadWriteData(reviewSubmissionLambda);
+        props.walletTable.grantReadWriteData(reviewSubmissionLambda);
+        props.transactionsTable.grantWriteData(reviewSubmissionLambda);
+        props.workersTable.grantReadWriteData(reviewSubmissionLambda);
 
         // POST /submissions/{submissionId}/review
         const submissionById = submissions.addResource('{submissionId}');
@@ -222,9 +231,13 @@ export class ApiStack extends cdk.Stack {
             entry: path.join(__dirname, '../../backend/src/tasks/list-my-tasks.ts'),
             environment: {
                 TASKS_TABLE: props.tasksTable.tableName,
+                SUBMISSIONS_TABLE: props.submissionsTable.tableName,
+                MEDIA_BUCKET: props.mediaBucket.bucketName,
             },
         });
         props.tasksTable.grantReadData(listMyTasksLambda);
+        props.submissionsTable.grantReadData(listMyTasksLambda);
+        props.mediaBucket.grantRead(listMyTasksLambda);
 
         const myTasks = tasks.addResource('my-tasks');
         myTasks.addMethod('GET', new apigateway.LambdaIntegration(listMyTasksLambda), {
@@ -342,25 +355,66 @@ export class ApiStack extends cdk.Stack {
             }
         }
 
-        // ============ Dispute Endpoints (if lambdas provided) ============
-        if (props.startDisputeLambda || props.adminReviewLambda) {
-            const disputes = this.api.root.addResource('disputes');
+        // ============ Dispute Endpoints ============
+        const disputes = this.api.root.addResource('disputes');
 
-            if (props.startDisputeLambda) {
-                // POST /disputes - Start a new dispute
-                disputes.addMethod('POST', new apigateway.LambdaIntegration(props.startDisputeLambda), {
-                    authorizer: platformAuthorizer,
-                });
-            }
+        // 1. Create Dispute
+        const createDisputeLambda = new nodejs.NodejsFunction(this, 'CreateDisputeFunction', {
+            runtime: lambda.Runtime.NODEJS_20_X,
+            handler: 'handler',
+            entry: path.join(__dirname, '../../backend/src/disputes/create.ts'),
+            environment: {
+                DISPUTES_TABLE: props.disputesTable.tableName,
+                SUBMISSIONS_TABLE: props.submissionsTable.tableName,
+            },
+        });
+        props.disputesTable.grantWriteData(createDisputeLambda);
+        props.submissionsTable.grantReadData(createDisputeLambda);
 
-            if (props.adminReviewLambda) {
-                const resolve = disputes.addResource('resolve');
-                // POST /disputes/resolve - Admin resolve dispute
-                resolve.addMethod('POST', new apigateway.LambdaIntegration(props.adminReviewLambda), {
-                    authorizer: platformAuthorizer,
-                });
-            }
-        }
+        disputes.addMethod('POST', new apigateway.LambdaIntegration(createDisputeLambda), {
+            authorizer: platformAuthorizer
+        });
+
+        // 2. List Disputes
+        const listDisputesLambda = new nodejs.NodejsFunction(this, 'ListDisputesFunction', {
+            runtime: lambda.Runtime.NODEJS_20_X,
+            handler: 'handler',
+            entry: path.join(__dirname, '../../backend/src/disputes/list.ts'),
+            environment: {
+                DISPUTES_TABLE: props.disputesTable.tableName,
+            },
+        });
+        props.disputesTable.grantReadData(listDisputesLambda);
+
+        disputes.addMethod('GET', new apigateway.LambdaIntegration(listDisputesLambda), {
+            authorizer: platformAuthorizer // TODO: Validate admin group in lambda
+        });
+
+        // 3. Resolve Dispute
+        const resolveDisputeLambda = new nodejs.NodejsFunction(this, 'ResolveDisputeFunction', {
+            runtime: lambda.Runtime.NODEJS_20_X,
+            handler: 'handler',
+            entry: path.join(__dirname, '../../backend/src/disputes/resolve.ts'),
+            environment: {
+                DISPUTES_TABLE: props.disputesTable.tableName,
+                SUBMISSIONS_TABLE: props.submissionsTable.tableName,
+                TASKS_TABLE: props.tasksTable.tableName,
+                WALLET_TABLE: props.walletTable.tableName,
+                TRANSACTIONS_TABLE: props.transactionsTable.tableName,
+                WORKERS_TABLE: props.workersTable.tableName,
+            },
+        });
+        props.disputesTable.grantReadWriteData(resolveDisputeLambda);
+        props.submissionsTable.grantReadWriteData(resolveDisputeLambda);
+        props.tasksTable.grantReadWriteData(resolveDisputeLambda);
+        props.walletTable.grantReadWriteData(resolveDisputeLambda);
+        props.transactionsTable.grantWriteData(resolveDisputeLambda);
+        props.workersTable.grantReadWriteData(resolveDisputeLambda);
+
+        const resolveDispute = disputes.addResource('resolve');
+        resolveDispute.addMethod('POST', new apigateway.LambdaIntegration(resolveDisputeLambda), {
+            authorizer: platformAuthorizer
+        });
 
         // --- Outputs ---
         new cdk.CfnOutput(this, 'ApiUrl', {

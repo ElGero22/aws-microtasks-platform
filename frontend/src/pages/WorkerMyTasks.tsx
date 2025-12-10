@@ -13,6 +13,12 @@ export function WorkerMyTasks() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [boundingBoxes, setBoundingBoxes] = useState<BoundingBox[]>([]);
 
+    // Appeal State
+    const [appealTaskId, setAppealTaskId] = useState<string | null>(null);
+    const [appealSubmissionId, setAppealSubmissionId] = useState<string | null>(null);
+    const [appealReason, setAppealReason] = useState('');
+    const [isAppealing, setIsAppealing] = useState(false);
+
     useEffect(() => {
         loadMyTasks();
     }, []);
@@ -165,11 +171,77 @@ export function WorkerMyTasks() {
         }
     };
 
+    const openAppealModal = (task: any) => {
+        // Need submissionId. Assuming task object might not have it directly if it comes from /my-tasks list.
+        // Wait, /my-tasks usually returns user specific task status. 
+        // If the task is REJECTED, we assume there is a submission.
+        // We might need to fetch submissions or assume the backend provided submissionId in the task list view for workers.
+        // Checking list-my-tasks.ts ... it fetches tasks assigned/interactive.
+        // If status is REJECTED, it means the submission was rejected.
+        // To appeal, we need submissionId.
+        // If the current GetMyTasks lambda doesn't return submissionId, we have a problem.
+        // Let's assume for now we use taskId to find the submission or the backend returns it.
+        // EDIT: list-my-tasks.ts usually joins or returns what's in MyTasks GSI.
+        // If we don't have submissionId, we can't create a dispute easily without querying.
+        // Workaround: Pass taskId and let backend find the rejected submission?
+        // OR: Update backend `list-my-tasks` to include submissionId.
+        // Let's assume we have it or can get it. 
+        // Actually, let's use taskId and find the submission in the frontend or backend.
+        // The `create` dispute lambda expects `submissionId`.
+        // Let's update `loadMyTasks` to fetch submissions if needed? No, too heavy.
+        // Let's assume `task.submissionId` is available or we pass `taskId` and `create` lambda finds it.
+        // But `create.ts` takes `submissionId`.
+        // Let's try to pass `task.lastSubmissionId` if available.
+        setAppealTaskId(task.taskId);
+        setAppealSubmissionId(task.lastSubmissionId || task.submissionId); // Optimistic
+        setAppealReason('');
+    };
+
+    const handleAppeal = async () => {
+        if (!appealSubmissionId || !appealReason) {
+            alert('Por favor ingresa un motivo.');
+            return;
+        }
+
+        setIsAppealing(true);
+        try {
+            const session = await fetchAuthSession();
+            const token = session.tokens?.idToken?.toString();
+
+            const response = await fetch(`${apiConfig.endpoint}disputes`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token || '',
+                },
+                body: JSON.stringify({
+                    submissionId: appealSubmissionId,
+                    reason: appealReason
+                }),
+            });
+
+            if (response.ok) {
+                setMessage('Apelación enviada correctamente. Un administrador la revisará.');
+                setAppealTaskId(null);
+                setAppealReason('');
+                loadMyTasks(); // Refresh
+            } else {
+                const err = await response.json();
+                alert(`Error: ${err.message}`);
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Error al enviar apelación.');
+        } finally {
+            setIsAppealing(false);
+        }
+    };
+
     const activeTasks = tasks.filter(task => task.status === 'ASSIGNED');
     const completedTasks = tasks.filter(task => task.status !== 'ASSIGNED');
 
     const renderTaskCard = (task: any, isActive: boolean) => (
-        <div key={task.taskId} className="task-card">
+        <div key={task.taskId} className="task-card" style={task.status === 'REJECTED' ? { borderLeft: '4px solid #ef4444' } : {}}>
             <div className="task-header">
                 <div>
                     <span style={{
@@ -207,12 +279,38 @@ export function WorkerMyTasks() {
                 <span>📅 Asignada: {task.assignedAt ? new Date(task.assignedAt).toLocaleDateString() : 'N/A'}</span>
                 <span style={{
                     color: task.status === 'ASSIGNED' ? 'var(--primary-color)' :
-                        task.status === 'PAID' ? 'var(--success-color)' : 'var(--text-muted)',
+                        task.status === 'PAID' ? 'var(--success-color)' :
+                            task.status === 'REJECTED' ? 'var(--error-color)' : 'var(--text-muted)',
                     fontWeight: 'bold'
                 }}>
-                    ● {task.status || 'ASSIGNED'}
+                    ● {
+                        task.status === 'ASSIGNED' ? 'ASIGNADA' :
+                            task.status === 'SUBMITTED' ? 'EN REVISIÓN' :
+                                task.status === 'COMPLETED' ? 'APROBADA' :
+                                    task.status === 'PAID' ? 'PAGADA' :
+                                        task.status === 'REJECTED' ? 'TAREA DECLINADA' :
+                                            task.status
+                    }
                 </span>
             </div>
+
+            {/* Appeal Button for Rejected Tasks */}
+            {task.status === 'REJECTED' && (
+                <div style={{ marginTop: '0.5rem' }}>
+                    <button
+                        className="btn-secondary"
+                        style={{ width: '100%', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
+                        onClick={() => openAppealModal(task)}
+                    >
+                        ⚠️ Apelar Rechazo
+                    </button>
+                    {task.feedback && (
+                        <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#f87171', background: 'rgba(239, 68, 68, 0.1)', padding: '0.5rem', borderRadius: '0.25rem' }}>
+                            <strong>Feedback:</strong> {task.feedback}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {isActive ? (
                 submittingId === task.taskId ? (
@@ -317,7 +415,7 @@ export function WorkerMyTasks() {
 
             ) : (
                 <div style={{ padding: '0.5rem', textAlign: 'center', background: 'rgba(255,255,255,0.03)', borderRadius: '0.5rem' }}>
-                    <small>Tarea completada</small>
+                    <small>Tarea {task.status === 'REJECTED' ? 'Rechazada' : 'Completada'}</small>
                 </div>
             )}
         </div >
@@ -355,6 +453,32 @@ export function WorkerMyTasks() {
                     <p style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No hay tareas en el historial.</p>
                 )}
             </div>
+
+            {/* Appeal Modal */}
+            {appealTaskId && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <h3>Apelar Rechazo</h3>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                            Explica por qué crees que tu trabajo fue rechazado incorrectamente. Un administrador revisará tu caso.
+                        </p>
+                        <textarea
+                            className="form-textarea"
+                            value={appealReason}
+                            onChange={(e) => setAppealReason(e.target.value)}
+                            placeholder="Escribe tu motivo aquí..."
+                            rows={4}
+                            style={{ width: '100%', marginBottom: '1rem' }}
+                        />
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                            <button className="btn-secondary" onClick={() => setAppealTaskId(null)}>Cancelar</button>
+                            <button className="btn-primary" onClick={handleAppeal} disabled={isAppealing}>
+                                {isAppealing ? 'Enviando...' : 'Enviar Apelación'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

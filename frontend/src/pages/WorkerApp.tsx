@@ -40,15 +40,15 @@ export function WorkerApp() {
                     const data = await response.json();
                     const tasks = data.tasks || [];
 
-                    // Only count APPROVED or PAID tasks as actual earnings.
+                    // Only count APPROVED, PAID or COMPLETED tasks as actual earnings.
                     const total = tasks
-                        .filter((t: any) => ['APPROVED', 'PAID'].includes(t.status))
-                        .reduce((sum: number, t: any) => sum + ((parseFloat(t.reward) || 0) * 0.8), 0);
+                        .filter((t: any) => ['APPROVED', 'PAID', 'COMPLETED'].includes(t.status))
+                        .reduce((sum: number, t: any) => sum + (parseFloat(t.reward) || 0), 0);
 
                     // Calculate Pending Earnings (Submitted but not yet approved)
                     const pending = tasks
                         .filter((t: any) => ['SUBMITTED', 'PENDING_QC'].includes(t.status))
-                        .reduce((sum: number, t: any) => sum + ((parseFloat(t.reward) || 0) * 0.8), 0);
+                        .reduce((sum: number, t: any) => sum + (parseFloat(t.reward) || 0), 0);
 
                     setEarnings(total);
                     setPendingEarnings(pending);
