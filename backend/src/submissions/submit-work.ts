@@ -135,13 +135,24 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             // Non-critical failure for notification, continue
         }
 
-        // 3. Send to SQS for QC (DISABLED to prevent auto-approval)
-        /*
-        await sqsClient.send(new SendMessageCommand({
-            QueueUrl: SUBMISSION_QUEUE_URL,
-            MessageBody: JSON.stringify({ submissionId }),
-        }));
-        */
+        // 3. Send to SQS for QC validation (AI validation with Rekognition/Transcribe)
+        if (SUBMISSION_QUEUE_URL) {
+            try {
+                await sqsClient.send(new SendMessageCommand({
+                    QueueUrl: SUBMISSION_QUEUE_URL,
+                    MessageBody: JSON.stringify({
+                        submissionId,
+                        taskId,
+                        workerId,
+                        answer: body.content || body.answer || '',
+                    }),
+                }));
+                console.log(`Sent submission ${submissionId} to QC queue`);
+            } catch (sqsError) {
+                console.error('Failed to send to SQS:', sqsError);
+                // Non-critical - continue even if SQS fails
+            }
+        }
 
         return {
             statusCode: 201,

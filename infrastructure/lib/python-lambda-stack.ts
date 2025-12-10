@@ -80,8 +80,9 @@ export class PythonLambdaStack extends cdk.Stack {
         }
 
         // Lambda layer for shared code
+        // AWS Lambda expects Python packages in a 'python/' subdirectory
         const sharedLayer = new lambda.LayerVersion(this, 'SharedLayer', {
-            code: lambda.Code.fromAsset(path.join(__dirname, '../../backend/src/shared')),
+            code: lambda.Code.fromAsset(path.join(__dirname, '../../backend/layer')),
             compatibleRuntimes: [lambda.Runtime.PYTHON_3_11],
             description: 'Shared utilities for Python handlers',
         });

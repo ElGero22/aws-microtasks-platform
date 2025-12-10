@@ -141,5 +141,163 @@ class TestConsensusVoting:
         assert len(matching) == 3
 
 
+class TestAIValidation:
+    """Tests for AI-powered validation using Rekognition and Transcribe."""
+    
+    def test_validate_image_classification_match(self):
+        """Test that Rekognition match returns approval."""
+        from handlers.qc.validate_submission import validate_image_classification
+        from unittest.mock import patch
+        
+        mock_labels = [
+            {'Name': 'Cat', 'Confidence': 98.5, 'Parents': ['Animal', 'Pet']},
+            {'Name': 'Animal', 'Confidence': 99.0, 'Parents': []},
+        ]
+        
+        with patch('handlers.qc.validate_submission.detect_labels', return_value=mock_labels):
+            with patch('handlers.qc.validate_submission.config') as mock_config:
+                mock_config.MEDIA_BUCKET = 'test-bucket'
+                mock_config.REKOGNITION_MIN_CONFIDENCE = 90
+                
+                result, confidence, method = validate_image_classification(
+                    payload={'imageS3Key': 'test-image.jpg'},
+                    worker_answer='cat'
+                )
+                
+                assert result is True
+                assert confidence >= 0.8
+                assert 'Rekognition match' in method or 'Cat' in method
+
+    def test_validate_image_classification_no_match(self):
+        """Test that Rekognition mismatch returns False."""
+        from handlers.qc.validate_submission import validate_image_classification
+        from unittest.mock import patch
+        
+        mock_labels = [
+            {'Name': 'Dog', 'Confidence': 95.0, 'Parents': ['Animal', 'Pet']},
+            {'Name': 'Canine', 'Confidence': 90.0, 'Parents': []},
+        ]
+        
+        with patch('handlers.qc.validate_submission.detect_labels', return_value=mock_labels):
+            with patch('handlers.qc.validate_submission.config') as mock_config:
+                mock_config.MEDIA_BUCKET = 'test-bucket'
+                mock_config.REKOGNITION_MIN_CONFIDENCE = 90
+                
+                result, confidence, method = validate_image_classification(
+                    payload={'imageS3Key': 'dog-image.jpg'},
+                    worker_answer='cat'  # Wrong answer
+                )
+                
+                assert result is False
+                assert 'no match' in method.lower() or 'Dog' in method
+
+    def test_validate_audio_transcription_match(self):
+        """Test that transcription similarity check works."""
+        from handlers.qc.validate_submission import validate_audio_transcription
+        
+        task = {
+            'aiTranscription': 'Hola, buenos días. ¿Cómo estás?',
+            'transcriptionStatus': 'COMPLETED'
+        }
+        
+        # Worker answer is very similar
+        result, confidence, method = validate_audio_transcription(
+            task=task,
+            worker_answer='Hola, buenos días. ¿Cómo estás?'
+        )
+        
+        assert result is True
+        assert confidence >= 0.85
+
+    def test_validate_audio_transcription_partial_match(self):
+        """Test partial transcription match returns inconclusive."""
+        from handlers.qc.validate_submission import validate_audio_transcription
+        
+        task = {
+            'aiTranscription': 'El rápido zorro marrón salta sobre el perro perezoso.',
+            'transcriptionStatus': 'COMPLETED'
+        }
+        
+        # Partial match
+        result, confidence, method = validate_audio_transcription(
+            task=task,
+            worker_answer='El zorro salta sobre el perro.'
+        )
+        
+        # Should be inconclusive (partial match)
+        assert confidence >= 0.5
+
+    def test_validate_audio_transcription_not_available(self):
+        """Test that missing transcription returns None."""
+        from handlers.qc.validate_submission import validate_audio_transcription
+        
+        task = {
+            'transcriptionStatus': 'IN_PROGRESS'  # Not completed yet
+        }
+        
+        result, confidence, method = validate_audio_transcription(
+            task=task,
+            worker_answer='Any answer'
+        )
+        
+        assert result is None
+        assert 'not available' in method.lower()
+
+
+class TestAIValidationDispatcher:
+    """Tests for the main validate_with_ai dispatcher function."""
+    
+    def test_image_classification_dispatch(self):
+        """Test that image-classification tasks use Rekognition."""
+        from handlers.qc.validate_submission import validate_with_ai
+        from unittest.mock import patch
+        
+        with patch('handlers.qc.validate_submission.validate_image_classification') as mock:
+            mock.return_value = (True, 0.95, 'Rekognition match')
+            
+            result, conf, method = validate_with_ai(
+                task_type='image-classification',
+                payload={'imageS3Key': 'test.jpg'},
+                worker_answer='cat',
+                task={}
+            )
+            
+            mock.assert_called_once()
+            assert result is True
+
+    def test_audio_transcription_dispatch(self):
+        """Test that audio-transcription tasks use Transcribe."""
+        from handlers.qc.validate_submission import validate_with_ai
+        from unittest.mock import patch
+        
+        with patch('handlers.qc.validate_submission.validate_audio_transcription') as mock:
+            mock.return_value = (True, 0.90, 'Transcription match')
+            
+            result, conf, method = validate_with_ai(
+                task_type='audio-transcription',
+                payload={},
+                worker_answer='test',
+                task={'aiTranscription': 'test', 'transcriptionStatus': 'COMPLETED'}
+            )
+            
+            mock.assert_called_once()
+            assert result is True
+
+    def test_generic_task_no_ai(self):
+        """Test that generic tasks skip AI validation."""
+        from handlers.qc.validate_submission import validate_with_ai
+        
+        result, conf, method = validate_with_ai(
+            task_type='generic',
+            payload={},
+            worker_answer='any',
+            task={}
+        )
+        
+        assert result is None
+        assert 'No AI validation' in method
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
